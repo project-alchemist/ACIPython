@@ -200,9 +200,9 @@ class WorkerClient:
             col_start = self.input_message.read_long()
             col_end   = self.input_message.read_long()
 
-            for i in range(0, len(rows)):
-                for j in range(0, len(cols)):
-                    data[i, j] = self.input_message.read_double()
+            for i in range(row_start, row_end+1):
+                for j in range(col_start, col_end+1):
+                    data[rows.index(i), cols.index(j)] = self.input_message.read_double()
 
             if self.input_message.eom():
                 break

@@ -77,6 +77,8 @@ class AlchemistSession:
 
         data = np.zeros((num_rows, num_cols))
 
+        print("Fetching " + str(num_rows) + "x" + str(num_cols) + " array from Alchemist")
+
         self.workers.get_blocks(mh, data, rows, cols)
 
         return data
