@@ -88,7 +88,7 @@ class DriverClient:
                     return False
                 remaining_body_length -= len(packet)
                 self.input_message.add_packet(packet)
-            # self.input_message.print()
+            self.input_message.print()
             return True
         except InterruptedError:
             print("ERROR: Unable to send message (InterruptedError)")

@@ -54,7 +54,7 @@ class AlchemistSession:
 
         mh = self.get_matrix_handle(f)
 
-        chunk = 100000
+        chunk = 1000
 
         for i in range(0, num_rows, chunk):
             self.workers.send_blocks(mh, np.float64(f[i:min(num_rows, i+chunk), :]), i)
@@ -77,8 +77,6 @@ class AlchemistSession:
 
         data = np.zeros((num_rows, num_cols))
 
-        print(data.shape)
-
         self.workers.get_blocks(mh, data, rows, cols)
 
         return data
@@ -92,6 +90,7 @@ class AlchemistSession:
         self.driver.load_library(name)
 
     def run_task(self, lh, name, mh, rank):
+        print("Alchemist started task " + name + " - please wait ...")
         start = time.time()
         out = self.driver.truncated_svd(lh, name, mh, rank)
         end = time.time()

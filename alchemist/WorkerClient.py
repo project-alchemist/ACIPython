@@ -112,7 +112,7 @@ class WorkerClient:
     def send_message(self):
         try:
             self.output_message.finish()
-            self.output_message.print()
+            # self.output_message.print()
             self.sock.sendall(self.output_message.get())
             self.output_message.reset()
             return True
@@ -135,7 +135,7 @@ class WorkerClient:
                     return False
                 remaining_body_length -= len(packet)
                 self.input_message.add_packet(packet)
-            self.input_message.print()
+            # self.input_message.print()
             return True
         except InterruptedError:
             print("ERROR: Unable to send message (InterruptedError)")
@@ -200,8 +200,8 @@ class WorkerClient:
             col_start = self.input_message.read_long()
             col_end   = self.input_message.read_long()
 
-            for i in range(row_start, row_end+1):
-                for j in range(col_start, col_end + 1):
+            for i in range(0, len(rows)):
+                for j in range(0, len(cols)):
                     data[i, j] = self.input_message.read_double()
 
             if self.input_message.eom():

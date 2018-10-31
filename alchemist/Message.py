@@ -33,7 +33,7 @@ class Message:
     write_pos = header_length               # for writing data
 
     def __init__(self):
-        self.set_max_length(1000000)
+        self.set_max_length(10000000)
         self.reset()
 
     def eom(self):
