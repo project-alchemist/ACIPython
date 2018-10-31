@@ -28,8 +28,10 @@ class WorkerClients:
             self.workers.append(worker)
 
     def connect(self):
+        flag = True
         for i in range(0, self.num_workers):
-            self.workers[i].connect()
+            flag = flag & self.workers[i].connect()
+        return True
 
     def print(self):
         for i in range(0, self.num_workers):
@@ -39,9 +41,9 @@ class WorkerClients:
         for i in range(0, self.num_workers):
             self.workers[i].handshake()
 
-    def send_blocks(self, mh, data):
+    def send_blocks(self, mh, data, row_start=0):
         for i in range(0, self.num_workers):
-            self.workers[i].send_blocks(mh, data)
+            self.workers[i].send_blocks(mh, data, row_start)
 
     def get_blocks(self, mh, data, rows, cols):
         for i in range(0, self.num_workers):
@@ -156,17 +158,20 @@ class WorkerClient:
                 return True
         return False
 
-    def send_blocks(self, mh, data):
+    def send_blocks(self, mh, data, row_start=0):
+
+        sh = data.shape
+
         self.output_message.start(self.client_id, self.session_id, "SEND_MATRIX_BLOCKS")
         self.output_message.write_short(mh.id)
-        for i in range(0, mh.num_rows):
-            if mh.row_layout[i] == self.id:
-                self.output_message.write_long(i)
-                self.output_message.write_long(i)
+        for i in range(0, sh[0]):
+            if mh.row_layout[row_start+i] == self.id:
+                self.output_message.write_long(row_start+i)
+                self.output_message.write_long(row_start+i)
                 self.output_message.write_long(0)
-                self.output_message.write_long(mh.num_cols-1)
-                for j in range(0, mh.num_cols):
-                    self.output_message.write_double(data[i,j])
+                self.output_message.write_long(sh[1]-1)
+                for j in range(0, sh[1]):
+                    self.output_message.write_double(data[i, j])
 
         self.send_message()
         self.receive_message()
@@ -190,7 +195,6 @@ class WorkerClient:
         self.input_message.read_short()
 
         while True:
-            print(self.input_message.eom())
             row_start = self.input_message.read_long()
             row_end   = self.input_message.read_long()
             col_start = self.input_message.read_long()

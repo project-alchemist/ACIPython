@@ -17,6 +17,8 @@ class DriverClient:
     client_id = 0
     session_id = 0
 
+    max_alchemist_workers = 3
+
     sock = []
 
     libraries = {}
@@ -63,7 +65,7 @@ class DriverClient:
     def send_message(self):
         try:
             self.output_message.finish()
-            self.output_message.print()
+            # self.output_message.print()
             self.sock.sendall(self.output_message.get())
             self.output_message.reset()
             return True
@@ -86,7 +88,7 @@ class DriverClient:
                     return False
                 remaining_body_length -= len(packet)
                 self.input_message.add_packet(packet)
-            self.input_message.print()
+            # self.input_message.print()
             return True
         except InterruptedError:
             print("ERROR: Unable to send message (InterruptedError)")
@@ -108,6 +110,9 @@ class DriverClient:
                 self.session_id = self.input_message.read_session_id()
                 return True
         return False
+
+    def get_max_alchemist_workers(self):
+        return self.max_alchemist_workers
 
     def send_test_string(self):
         test_message = "This is a test message from client {}".format(self.client_id)
@@ -131,15 +136,15 @@ class DriverClient:
             path = "/Users/kai/Projects/AlLib/target/allib.dylib"
             self.libraries[name] = TestLib(name, path)
 
-        self.output_message.start(self.client_id, self.session_id, "LOAD_LIBRARY")
-        self.output_message.write_string(name)
-        self.output_message.write_string(path)
-        self.send_message()
-        self.receive_message()
+        # self.output_message.start(self.client_id, self.session_id, "LOAD_LIBRARY")
+        # self.output_message.write_string(name)
+        # self.output_message.write_string(path)
+        # self.send_message()
+        # self.receive_message()
 
         return self.libraries[name]
 
-    def truncated_svd(self, name, mh, rank):
+    def truncated_svd(self, lh, name, mh, rank):
         method = 0
         self.output_message.start(self.client_id, self.session_id, "RUN_TASK")
         self.output_message.write_string(name)
@@ -229,28 +234,31 @@ class DriverClient:
     #     return A
 
     def yield_workers(self):
-        self.output_message.start("YIELD_WORKERS")
+        self.output_message.start(self.client_id, self.session_id, "YIELD_WORKERS")
         return self.send_message
 
     def get_matrix_info(self):
-        self.output_message.start("MATRIX_INFO")
+        self.output_message.start(self.client_id, self.session_id, "MATRIX_INFO")
         return self.send_message
 
     def list_all_alchemist_workers(self):
-        self.output_message.start("LIST_ALL_WORKERS")
+        self.output_message.start(self.client_id, self.session_id, "LIST_ALL_WORKERS")
         self.send_message()
         self.receive_message()
 
+        self.max_alchemist_workers = self.input_message.read_short()
+        return self.input_message.read_string()
+
     def list_active_alchemist_workers(self):
-        self.output_message.start("LIST_ACTIVE_WORKERS")
+        self.output_message.start(self.client_id, self.session_id, "LIST_ACTIVE_WORKERS")
         return self.send_message()
 
     def list_inactive_alchemist_workers(self):
-        self.output_message.start("LIST_INACTIVE_WORKERS")
+        self.output_message.start(self.client_id, self.session_id, "LIST_INACTIVE_WORKERS")
         return self.send_message()
 
     def list_assigned_alchemist_workers(self):
-        self.output_message.start("LIST_ASSIGNED_WORKERS")
+        self.output_message.start(self.client_id, self.session_id, "LIST_ASSIGNED_WORKERS")
         return self.send_message()
 
     def retry_connection(self, retries=3):

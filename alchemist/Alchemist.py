@@ -1,6 +1,7 @@
 from .DriverClient import DriverClient
 from .WorkerClient import WorkerClients
 import h5py
+import time
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -12,20 +13,26 @@ class AlchemistSession:
     driver = []
     workers = []
 
+    workers_connected = False
+
     def __init__(self):
+        print("Starting Alchemist session")
         self.driver = DriverClient()
         self.workers = WorkerClients()
+        self.workers_connected = False
+        print("Alchemist session ready")
 
     def __del__(self):
         print("Ending Alchemist session")
         self.close()
 
     def read_from_hdf5(self, filename):
+        print("Loading " + filename)
         return h5py.File(filename, 'r')
 
     def send_array(self, data):
         max_block_rows = 100
-        max_block_cols = 10000
+        max_block_cols = 20000
 
         (num_rows, num_cols) = data.shape
 
@@ -34,55 +41,79 @@ class AlchemistSession:
         print(mh.row_layout)
 
         self.workers.send_blocks(mh, data)
-        # for i in range(0, num_rows, max_block_rows):
-        #     block = data[i, min(num_rows,i+max_block_rows)]
         #     self.driver.send_block(mh, block)
 
         return mh
 
-    def get_array(self, mh, row_range=[-1], col_range=[-1]):
+    def send_hdf5(self, f):
 
-        if row_range[0] == -1:
+        sh = f.shape
+
+        num_rows = sh[0]
+        num_cols = sh[1]
+
+        mh = self.get_matrix_handle(f)
+
+        chunk = 100000
+
+        for i in range(0, num_rows, chunk):
+            self.workers.send_blocks(mh, np.float64(f[i:min(num_rows, i+chunk), :]), i)
+
+        return mh
+
+    def get_array(self, mh, rows=[-1], cols=[-1]):
+
+        if rows[0] == -1:
             num_rows = mh.num_rows
-            row_range = range(0, num_rows)
+            rows = range(0, num_rows)
         else:
-            num_rows = len(row_range)
+            num_rows = len(rows)
 
-        if col_range[0] == -1:
+        if cols[0] == -1:
             num_cols = mh.num_cols
-            col_range = range(0, num_cols)
+            cols = range(0, mh.num_cols)
         else:
-            num_cols = len(col_range)
+            num_cols = len(cols)
 
         data = np.zeros((num_rows, num_cols))
 
-        self.workers.get_blocks(mh, data, row_range, col_range)
+        print(data.shape)
+
+        self.workers.get_blocks(mh, data, rows, cols)
 
         return data
 
     def get_matrix_handle(self, data):
         (num_rows, num_cols) = data.shape
 
-        print(num_rows)
-        print(num_cols)
-
         return self.driver.send_matrix_info(num_rows, num_cols)
 
     def load_library(self, name):
         self.driver.load_library(name)
 
-    def run_task(self, name, mh, rank):
-        return self.driver.truncated_svd(name, mh, rank)
+    def run_task(self, lh, name, mh, rank):
+        start = time.time()
+        out = self.driver.truncated_svd(lh, name, mh, rank)
+        end = time.time()
+        print("Elapsed time for truncated SVD is " + str(end - start))
+        return out
 
     def connect_to_alchemist(self, address, port):
         self.driver.address = address
         self.driver.port = port
 
-        return self.driver.connect()
+        self.driver.connect()
 
     def request_workers(self, num_requested_workers):
-        self.workers.set_workers(self.driver.request_workers(num_requested_workers))
-        self.workers.print()
+        if num_requested_workers < 2:
+            print("You can ask for more than that!")
+        elif num_requested_workers > self.driver.get_max_alchemist_workers():
+            print("You demand too much!")
+            print("There are just " + str(self.driver.get_max_alchemist_workers()) + " Alchemist workers in total")
+        else:
+            self.workers.set_workers(self.driver.request_workers(num_requested_workers))
+            self.workers.print()
+            self.workers_connected = self.workers.connect()
 
     def send_test_string(self):
         self.driver.send_test_string()
@@ -111,7 +142,13 @@ class AlchemistSession:
         parquet_writer.close()
 
     def load_library(self, lib_name):
-        return self.driver.load_library(lib_name)
+        if self.workers_connected:
+            lib = self.driver.load_library(lib_name)
+            print("Library " + lib_name + " loaded")
+            return lib
+        else:
+            print("Connect to Alchemist workers first")
+            return []
 
     def load_from_hdf5(self, file_name, dataset_name):
         return self.driver.load_from_hdf5(file_name, dataset_name)
@@ -121,6 +158,11 @@ class AlchemistSession:
 
     def get_matrix_info(self):
         self.driver.get_matrix_info()
+
+    def list_alchemist_workers(self):
+        list_of_all_alchemist_workers = self.driver.list_all_alchemist_workers()
+
+        print(list_of_all_alchemist_workers)
 
     def list_all_alchemist_workers(self):
         self.driver.list_all_alchemist_workers()
