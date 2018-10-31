@@ -27,7 +27,7 @@ class AlchemistSession:
         self.close()
 
     def read_from_hdf5(self, filename):
-        print("Loading " + filename)
+        print("Loaded " + filename)
         return h5py.File(filename, 'r')
 
     def send_array(self, data):
