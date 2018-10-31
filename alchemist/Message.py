@@ -5,7 +5,7 @@ import struct
 class Message:
 
     header_length = 9
-    max_body_length = 1000
+    max_body_length = 10000000
 
     commands = {"WAIT": 0, "HANDSHAKE": 1, "REQUEST_ID": 2, "CLIENT_INFO": 3, "SEND_TEST_STRING": 4,
                 "REQUEST_TEST_STRING": 5, "REQUEST_WORKERS": 6, "YIELD_WORKERS": 7,
@@ -37,8 +37,6 @@ class Message:
         self.reset()
 
     def eom(self):
-        print((self.read_pos, self.body_length))
-        print(self.read_pos > self.body_length)
         return self.read_pos > self.body_length
 
     def set_max_length(self, max_length):

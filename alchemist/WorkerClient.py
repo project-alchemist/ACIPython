@@ -198,7 +198,6 @@ class WorkerClient:
 
             for i in range(row_start, row_end+1):
                 for j in range(col_start, col_end + 1):
-                    print((i, j))
                     data[i, j] = self.input_message.read_double()
 
             if self.input_message.eom():
