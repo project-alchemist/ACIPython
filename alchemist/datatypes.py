@@ -1,0 +1,12 @@
+datatypes = {"NONE": 0,
+             "BYTE": 18,
+             "SHORT": 34,
+             "INT": 35,
+             "LONG": 36,
+             "FLOAT": 15,
+             "DOUBLE": 16,
+             "CHAR": 1,
+             "STRING": 46,
+             "COMMAND_CODE": 47,
+             "MATRIX": 48,
+             "LIBRARY": 49}

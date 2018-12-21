@@ -23,6 +23,14 @@ class MatrixHandle:
         self.num_cols = 0
         self.num_partitions = 0
 
+    def __init__(self, id, type, num_rows, num_cols, num_partitions, row_layout):
+        self.id = id
+        self.type = type
+        self.num_rows = num_rows
+        self.num_cols = num_cols
+        self.num_partitions = num_partitions
+        self.row_layout = row_layout
+
     def set(self, id, type, num_rows, num_cols, num_partitions, row_layout):
         self.id = id
         self.type = type

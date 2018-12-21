@@ -21,11 +21,12 @@ class WorkerClients:
     def __init__(self):
         self.num_workers = 0
 
-    def set_workers(self, worker_details):
-        self.num_workers = len(worker_details)
-        for i in range(0, self.num_workers):
-            worker = WorkerClient(worker_details[i].id, worker_details[i].hostname, worker_details[i].address, worker_details[i].port)
+    def add_workers(self, new_workers):
+        for i in range(self.num_workers, len(new_workers)):
+            worker = WorkerClient(new_workers[i].id, new_workers[i].hostname, new_workers[i].address, new_workers[i].port)
             self.workers.append(worker)
+        self.num_workers = len(new_workers)
+        return self.num_workers
 
     def connect(self):
         flag = True
@@ -74,6 +75,8 @@ class WorkerClient:
 
     sock = []
 
+    connected = False
+
     input_message = Message()
     output_message = Message()
 
@@ -83,31 +86,36 @@ class WorkerClient:
         self.address = address
         self.port = port
 
+        self.connected = False
+
         self.sock = []
 
     def connect(self):
 
-        # Create a TCP/IP socket
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if ~self.connected:
+            # Create a TCP/IP socket
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        # Connect the socket to the port where Alchemist is listening
-        server_address = (self.address, self.port)
-        print('Connecting to Alchemist at {0}:{1} ...'.format(*server_address))
-        try:
-            self.sock.connect(server_address)
-        except socket.gaierror:
-            print("ERROR: Address-related error connecting to Alchemist")
-            return False
-        except ConnectionRefusedError:
-            print("ERROR: Alchemist appears to be offline")
-            return False
+            # Connect the socket to the port where Alchemist is listening
+            server_address = (self.address, self.port)
+            print('Connecting to Alchemist at {0}:{1} ...'.format(*server_address))
+            try:
+                self.sock.connect(server_address)
+            except socket.gaierror:
+                self.connected = False
+                print("ERROR: Address-related error connecting to Alchemist")
+            except ConnectionRefusedError:
+                self.connected = False
+                print("ERROR: Alchemist appears to be offline")
 
-        if self.handshake():
-            print("Connected to Alchemist!")
-            return True
-        else:
-            print("Unable to connect to Alchemist")
-            return False
+            if self.handshake():
+                self.connected = True
+                print("Connected to Alchemist!")
+            else:
+                self.connected = False
+                print("Unable to connect to Alchemist")
+
+        return self.connected
 
     def send_message(self):
         try:

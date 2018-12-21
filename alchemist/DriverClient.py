@@ -17,7 +17,7 @@ class DriverClient:
     client_id = 0
     session_id = 0
 
-    max_alchemist_workers = 3
+    max_alchemist_workers = 0
 
     sock = []
 
@@ -61,6 +61,9 @@ class DriverClient:
         else:
             print("Unable to connect to Alchemist")
             return False
+
+    def start_message(self, command):
+        return self.output_message.start(self.client_id, self.session_id, command)
 
     def send_message(self):
         try:
@@ -117,7 +120,7 @@ class DriverClient:
     def send_test_string(self):
         test_message = "This is a test message from client {}".format(self.client_id)
         print("Sending test message: '" + test_message + "'")
-        self.output_message.start(self.client_id, self.session_id, "SEND_TEST_STRING")
+        self.start_message("SEND_TEST_STRING")
         self.output_message.write_string(test_message)
         self.send_message()
         self.receive_message()
@@ -125,61 +128,142 @@ class DriverClient:
 
     def request_test_string(self):
         print("Requesting test message from Alchemist.")
-        self.output_message.start(self.client_id, self.session_id, "REQUEST_TEST_STRING")
+        self.start_message("REQUEST_TEST_STRING")
         self.send_message()
         self.receive_message()
         print("Alchemist returned: '" + self.input_message.read_string() + "'")
 
-    def load_library(self, name):
+    def load_library(self, name, path=""):
 
         if name == "TestLib":
             path = "/Users/kai/Projects/AlLib/target/allib.dylib"
             self.libraries[name] = TestLib(name, path)
 
-        # self.output_message.start(self.client_id, self.session_id, "LOAD_LIBRARY")
-        # self.output_message.write_string(name)
-        # self.output_message.write_string(path)
-        # self.send_message()
-        # self.receive_message()
-
-        return self.libraries[name]
-
-    def truncated_svd(self, lh, name, mh, rank):
-        method = 0
-        self.output_message.start(self.client_id, self.session_id, "RUN_TASK")
+        self.start_message("LOAD_LIBRARY")
         self.output_message.write_string(name)
-        self.output_message.write_short(mh.id)
-        self.output_message.write_int(rank)
-        self.output_message.write_byte(method)
+        self.output_message.write_string(path)
         self.send_message()
         self.receive_message()
 
-        matrix_id = self.input_message.read_short()
-        num_rows = self.input_message.read_long()
-        num_cols = self.input_message.read_long()
-        row_layout = self.extract_layout(num_rows)
+        return self.libraries[name]
 
-        U = MatrixHandle().set(matrix_id, 'dense', num_rows, num_cols, 1, row_layout)
+    def run_task(self, lh, name, in_args, out_args):
+        self.start_message("RUN_TASK")
+        self.output_message.write_library_ID(lh.ID)
+        self.output_message.write_string(name)
+        for key, value in in_args.items():
+            self.output_message.write_bool(True)            # 'True' to flag next parameter is an input parameter
+            self.output_message.write_string(value.name)
+            if value.datatype == "BYTE":
+                self.output_message.write_byte(value.value)
+            elif value.datatype == "SHORT":
+                self.output_message.write_short(value.value)
+            elif value.datatype == "INT":
+                self.output_message.write_int(value.value)
+            elif value.datatype == "LONG":
+                self.output_message.write_long(value.value)
+            elif value.datatype == "FLOAT":
+                self.output_message.write_float(value.value)
+            elif value.datatype == "DOUBLE":
+                self.output_message.write_double(value.value)
+            elif value.datatype == "CHAR":
+                self.output_message.write_char(value.value)
+            elif value.datatype == "STRING":
+                self.output_message.write_string(value.value)
+            elif value.datatype == "MATRIX":
+                self.output_message.write_matrix_id(value.value.ID)
+        for key, value in out_args.items():
+            self.output_message.write_bool(False)           # 'False' to flag next parameter is an output parameter
+            self.output_message.write_string(value.name)
+            if value.datatype == "BYTE":
+                self.output_message.write_byte()
+            elif value.datatype == "SHORT":
+                self.output_message.write_short()
+            elif value.datatype == "INT":
+                self.output_message.write_int()
+            elif value.datatype == "LONG":
+                self.output_message.write_long()
+            elif value.datatype == "FLOAT":
+                self.output_message.write_float()
+            elif value.datatype == "DOUBLE":
+                self.output_message.write_double()
+            elif value.datatype == "CHAR":
+                self.output_message.write_char()
+            elif value.datatype == "STRING":
+                self.output_message.write_string()
+            elif value.datatype == "MATRIX":
+                self.output_message.write_matrix_id()
 
-        matrix_id = self.input_message.read_short()
-        num_rows = self.input_message.read_long()
-        num_cols = self.input_message.read_long()
-        row_layout = self.extract_layout(num_rows)
+        self.send_message()
+        self.receive_message()
 
-        S = MatrixHandle().set(matrix_id, 'dense', num_rows, num_cols, 1, row_layout)
+        while not self.input_message.eom():
+            name = self.input_message.read_string()
+            for key in out_args.keys():
+                if name == out_args[key].name:
+                    if out_args[key].datatype == "BYTE":
+                        out_args[key].set_value(self.input_message.read_byte())
+                    elif out_args[key].datatype == "SHORT":
+                        out_args[key].set_value(self.input_message.read_short())
+                    elif out_args[key].datatype == "INT":
+                        out_args[key].set_value(self.input_message.read_int())
+                    elif out_args[key].datatype == "LONG":
+                        out_args[key].set_value(self.input_message.read_long())
+                    elif out_args[key].datatype == "FLOAT":
+                        out_args[key].set_value(self.input_message.read_float())
+                    elif out_args[key].datatype == "DOUBLE":
+                        out_args[key].set_value(self.input_message.read_double())
+                    elif out_args[key].datatype == "CHAR":
+                        out_args[key].set_value(self.input_message.read_char())
+                    elif out_args[key].datatype == "STRING":
+                        out_args[key].set_value(self.input_message.read_string())
+                    elif out_args[key].datatype == "MATRIX":
+                        matrix_id = self.input_message.read_matrix_id()
+                        num_rows = self.input_message.read_long()
+                        num_cols = self.input_message.read_long()
+                        row_layout = self.extract_layout(num_rows)
 
-        matrix_id = self.input_message.read_short()
-        num_rows = self.input_message.read_long()
-        num_cols = self.input_message.read_long()
-        row_layout = self.extract_layout(num_rows)
+                        out_args[key].set_value(MatrixHandle(matrix_id, 'dense', num_rows, num_cols, 1, row_layout))
 
-        V = MatrixHandle().set(matrix_id, 'dense', num_rows, num_cols, 1, row_layout)
+        return out_args
 
-        return U, S, V
+
+    # def truncated_svd(self, lh, name, mh, rank):
+    #     method = 0
+    #     self.start_message("RUN_TASK")
+    #     self.output_message.write_string(name)
+    #     self.output_message.write_short(mh.id)
+    #     self.output_message.write_int(rank)
+    #     self.output_message.write_byte(method)
+    #     self.send_message()
+    #     self.receive_message()
+    #
+    #     matrix_id = self.input_message.read_short()
+    #     num_rows = self.input_message.read_long()
+    #     num_cols = self.input_message.read_long()
+    #     row_layout = self.extract_layout(num_rows)
+    #
+    #     U = MatrixHandle().set(matrix_id, 'dense', num_rows, num_cols, 1, row_layout)
+    #
+    #     matrix_id = self.input_message.read_short()
+    #     num_rows = self.input_message.read_long()
+    #     num_cols = self.input_message.read_long()
+    #     row_layout = self.extract_layout(num_rows)
+    #
+    #     S = MatrixHandle().set(matrix_id, 'dense', num_rows, num_cols, 1, row_layout)
+    #
+    #     matrix_id = self.input_message.read_short()
+    #     num_rows = self.input_message.read_long()
+    #     num_cols = self.input_message.read_long()
+    #     row_layout = self.extract_layout(num_rows)
+    #
+    #     V = MatrixHandle().set(matrix_id, 'dense', num_rows, num_cols, 1, row_layout)
+    #
+    #     return U, S, V
 
     def send_matrix_info(self, num_rows, num_cols):
-        print("Sending matrix info to Alchemist ...")
-        self.output_message.start(self.client_id, self.session_id, "MATRIX_INFO")
+        print("Sending matrix info to Alchemist ...", end="", flush=True)
+        self.start_message("MATRIX_INFO")
         self.output_message.write_byte(0)                   # Type: dense
         self.output_message.write_byte(0)                   # Layout: by rows (default)
         self.output_message.write_long(num_rows)            # Number of rows
@@ -193,7 +277,7 @@ class DriverClient:
         num_cols = self.input_message.read_long()
         row_layout = self.extract_layout(num_rows)
 
-        print("Done!")
+        print("done")
 
         return MatrixHandle().set(matrix_id, 'dense', num_rows, num_cols, 1, row_layout)
 
@@ -206,13 +290,17 @@ class DriverClient:
         return layout
 
     def request_workers(self, num_requested_workers):
-        print("Requesting {} workers from Alchemist".format(num_requested_workers))
-        self.output_message.start(self.client_id, self.session_id, "REQUEST_WORKERS")
+        if num_requested_workers == 1:
+            print("Requesting 1 worker from Alchemist")
+        else:
+            print("Requesting {} workers from Alchemist".format(num_requested_workers))
+
+        self.start_message("REQUEST_WORKERS")
         self.output_message.write_short(num_requested_workers)
         self.send_message()
         self.receive_message()
         num_allocated_workers = self.input_message.read_short()
-        print("Allocated {} workers:".format(num_allocated_workers))
+        print("Total allocated {} workers:".format(num_allocated_workers))
         workers = []
         for i in range(0, num_allocated_workers):
             worker = WorkerInfo()
@@ -224,7 +312,8 @@ class DriverClient:
         return workers
 
     def list_available_libraries(self):
-        return 0
+        self.start_message("LIST_AVAILABLE_LIBRARIES")
+        return self.send_message
 
     # def load_library(self, lib_name):
     #     print("Loading " + lib_name + " ... success")
@@ -236,39 +325,60 @@ class DriverClient:
     #     A.set(24, 'dense', 1200000, 10000, 2)
     #     return A
 
-    def yield_workers(self):
-        self.output_message.start(self.client_id, self.session_id, "YIELD_WORKERS")
-        return self.send_message
-
-    def get_matrix_info(self):
-        self.output_message.start(self.client_id, self.session_id, "MATRIX_INFO")
-        return self.send_message
-
-    def list_all_alchemist_workers(self):
-        self.output_message.start(self.client_id, self.session_id, "LIST_ALL_WORKERS")
+    def yield_workers(self, yielded_workers=[]):
+        self.start_message("YIELD_WORKERS")
+        for i in yielded_workers:
+            self.output_message.write_short(i)
         self.send_message()
         self.receive_message()
 
-        self.max_alchemist_workers = self.input_message.read_short()
+        deallocated_workers = []
+        while not self.input_message.eom():
+            deallocated_workers.append(self.input_message.read_short())
+
+        return deallocated_workers
+
+    def get_matrix_info(self):
+        self.start_message("MATRIX_INFO")
+        return self.send_message
+
+    def list_all_workers(self, preamble):
+        self.start_message("LIST_ALL_WORKERS")
+        self.output_message.write_string(preamble)
+        self.send_message()
+        self.receive_message()
+
         return self.input_message.read_string()
 
-    def list_active_alchemist_workers(self):
-        self.output_message.start(self.client_id, self.session_id, "LIST_ACTIVE_WORKERS")
-        return self.send_message()
+    def list_active_workers(self, preamble):
+        self.start_message("LIST_ACTIVE_WORKERS")
+        self.output_message.write_string(preamble)
+        self.send_message()
+        self.receive_message()
 
-    def list_inactive_alchemist_workers(self):
-        self.output_message.start(self.client_id, self.session_id, "LIST_INACTIVE_WORKERS")
-        return self.send_message()
+        return self.input_message.read_string()
 
-    def list_assigned_alchemist_workers(self):
-        self.output_message.start(self.client_id, self.session_id, "LIST_ASSIGNED_WORKERS")
-        return self.send_message()
+    def list_inactive_workers(self, preamble):
+        self.start_message("LIST_INACTIVE_WORKERS")
+        self.output_message.write_string(preamble)
+        self.send_message()
+        self.receive_message()
+
+        return self.input_message.read_string()
+
+    def list_assigned_workers(self, preamble):
+        self.start_message("LIST_ASSIGNED_WORKERS")
+        self.output_message.write_string(preamble)
+        self.send_message()
+        self.receive_message()
+
+        return self.input_message.read_string()
 
     def retry_connection(self, retries=3):
         while retries > 0:
             print("Reconnecting to Alchemist (try {}/{})".format(3 - retries + 1, 3))
             time.sleep(3)
-            if self.connect:
+            if self.connect():
                 return True
             else:
                 self.retry_connection(retries-1)
@@ -277,7 +387,7 @@ class DriverClient:
 
     def reset_socket(self):
         self.close_socket()
-        return self.connect()
+        return self.retry_connection()
 
     def close_socket(self):
         print("Closing socket")

@@ -2,6 +2,7 @@ from .DriverClient import DriverClient
 from .WorkerClient import WorkerClients
 import h5py
 import time
+import importlib
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -12,6 +13,7 @@ class AlchemistSession:
 
     driver = []
     workers = []
+    libraries = dict()
 
     workers_connected = False
 
@@ -89,14 +91,25 @@ class AlchemistSession:
         return self.driver.send_matrix_info(num_rows, num_cols)
 
     def load_library(self, name):
-        self.driver.load_library(name)
+        self.libraries[lh] = importlib("Libraries/" + name)
+        lh = self.driver.load_library(name)
+        return lh
 
-    def run_task(self, lh, name, mh, rank):
-        print("Alchemist started task " + name + " - please wait ...")
+    # def run_task(self, lh, name, **kwargs):
+    #     print("Alchemist started task " + name + " - please wait ...")
+    #     start = time.time()
+    #     in_args, out_args = self.libraries[lh].run_task(name, **kwargs)
+    #     out = self.driver.run_task(lh, name, in_args, out_args)
+    #     end = time.time()
+    #     print("Elapsed time for truncated SVD is " + str(end - start))
+    #     return out
+
+    def run_task(self, lh, name, in_args, out_args):
+        print("Alchemist started task " + name + " - please wait ... ", end="", flush=True)
         start = time.time()
-        out = self.driver.truncated_svd(lh, name, mh, rank)
+        out = self.driver.run_task(lh, name, in_args, out_args)
         end = time.time()
-        print("Elapsed time for truncated SVD is " + str(end - start))
+        print("done (" + str(end - start) + ")")
         return out
 
     def connect_to_alchemist(self, address, port):
@@ -106,15 +119,15 @@ class AlchemistSession:
         self.driver.connect()
 
     def request_workers(self, num_requested_workers):
-        if num_requested_workers < 2:
-            print("You can ask for more than that!")
-        elif num_requested_workers > self.driver.get_max_alchemist_workers():
-            print("You demand too much!")
-            print("There are just " + str(self.driver.get_max_alchemist_workers()) + " Alchemist workers in total")
-        else:
-            self.workers.set_workers(self.driver.request_workers(num_requested_workers))
-            self.workers.print()
-            self.workers_connected = self.workers.connect()
+        # if num_requested_workers < 2:
+        #     print("You can ask for more than that!")
+        # elif num_requested_workers > self.driver.get_max_alchemist_workers():
+        #     print("You demand too much!")
+        #     print("There are just " + str(self.driver.get_max_alchemist_workers()) + " Alchemist workers in total")
+        # else:
+        self.workers.add_workers(self.driver.request_workers(num_requested_workers))
+        self.workers.print()
+        self.workers_connected = self.workers.connect()
 
     def send_test_string(self):
         self.driver.send_test_string()
@@ -154,28 +167,36 @@ class AlchemistSession:
     def load_from_hdf5(self, file_name, dataset_name):
         return self.driver.load_from_hdf5(file_name, dataset_name)
 
-    def yield_workers(self):
-        self.driver.yield_workers()
+    def yield_workers(self, yielded_workers=[]):
+        deallocated_workers = sorted(self.driver.yield_workers(yielded_workers))
+
+        if len(deallocated_workers) == 0:
+            print("No workers were deallocated\n")
+        else:
+            workers_list = ""
+            for i in deallocated_workers:
+                workers_list += str(i)
+                if i < deallocated_workers[-1]:
+                    workers_list += ", "
+            print("Deallocated workers " + workers_list + "\n")
 
     def get_matrix_info(self):
         self.driver.get_matrix_info()
 
     def list_alchemist_workers(self):
-        list_of_all_alchemist_workers = self.driver.list_all_alchemist_workers()
+        return self.driver.list_all_workers()
 
-        print(list_of_all_alchemist_workers)
+    def list_all_workers(self, preamble=""):
+        return self.driver.list_all_workers(preamble)
 
-    def list_all_alchemist_workers(self):
-        self.driver.list_all_alchemist_workers()
+    def list_active_workers(self, preamble=""):
+        return self.driver.list_active_workers(preamble)
 
-    def list_active_alchemist_workers(self):
-        self.driver.list_active_alchemist_workers()
+    def list_inactive_workers(self, preamble=""):
+        return self.driver.list_inactive_workers(preamble)
 
-    def list_inactive_alchemist_workers(self):
-        self.driver.list_inactive_alchemist_workers()
-
-    def list_assigned_alchemist_workers(self):
-        self.driver.list_assigned_alchemist_workers()
+    def list_assigned_workers(self, preamble=""):
+        return self.driver.list_assigned_workers(preamble)
 
     def stop(self):
         self.close()

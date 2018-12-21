@@ -3,10 +3,12 @@ from .MatrixHandle import MatrixHandle
 
 class LibraryHandle:
 
+    ID = 0
     name = " "
     path = " "
 
-    def __init__(self, name, path):
+    def __init__(self, ID, name, path=""):
+        self.ID = ID
         self.name = name
         self.path = path
 

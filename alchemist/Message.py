@@ -1,4 +1,6 @@
 import numpy as np
+from .Parameter import Parameter
+from .datatypes import datatypes
 import struct
 
 
@@ -7,15 +9,35 @@ class Message:
     header_length = 9
     max_body_length = 10000000
 
-    commands = {"WAIT": 0, "HANDSHAKE": 1, "REQUEST_ID": 2, "CLIENT_INFO": 3, "SEND_TEST_STRING": 4,
-                "REQUEST_TEST_STRING": 5, "REQUEST_WORKERS": 6, "YIELD_WORKERS": 7,
-                "SEND_ASSIGNED_WORKERS_INFO": 8, "LIST_ALL_WORKERS": 9, "LIST_ACTIVE_WORKERS": 10,
-                "LIST_INACTIVE_WORKERS": 11, "LIST_ASSIGNED_WORKERS": 12, "LOAD_LIBRARY": 13,
-                "RUN_TASK": 14, "UNLOAD_LIBRARY": 15, "MATRIX_INFO": 16, "MATRIX_LAYOUT": 17,
-                "SEND_MATRIX_BLOCKS": 18, "REQUEST_MATRIX_BLOCKS":19, "SHUT_DOWN": 20}
-
-    datatypes = {"NONE": 0, "BYTE": 18, "SHORT": 34, "INT": 35, "LONG": 36, "FLOAT": 15, "DOUBLE": 16,
-                 "CHAR": 1, "STRING": 46, "COMMAND_CODE": 47}
+    commands = {"WAIT": 0,
+                # Connection
+                "HANDSHAKE": 1,
+                "REQUEST_ID": 2,
+                "CLIENT_INFO": 3,
+                "SEND_TEST_STRING": 4,
+                "REQUEST_TEST_STRING": 5,
+                "CLOSE_CONNECTION": 6,
+                # Workers
+                "REQUEST_WORKERS": 11,
+                "YIELD_WORKERS": 12,
+                "SEND_ASSIGNED_WORKERS_INFO": 13,
+                "LIST_ALL_WORKERS": 14,
+                "LIST_ACTIVE_WORKERS": 15,
+                "LIST_INACTIVE_WORKERS": 16,
+                "LIST_ASSIGNED_WORKERS": 17,
+                # Libraries
+                "LIST_AVAILABLE_LIBRARIES": 21,
+                "LOAD_LIBRARY": 22,
+                "UNLOAD_LIBRARY": 23,
+                # Matrices
+                "MATRIX_INFO": 31,
+                "MATRIX_LAYOUT": 32,
+                "SEND_MATRIX_BLOCKS": 33,
+                "REQUEST_MATRIX_BLOCKS": 34,
+                # Tasks
+                "RUN_TASK": 41,
+                # Shutting down
+                "SHUTDOWN": 99}
 
     message_buffer = bytearray(header_length)
 
@@ -33,11 +55,11 @@ class Message:
     write_pos = header_length               # for writing data
 
     def __init__(self):
-        self.set_max_length(10000000)
+        self.set_max_length(self.max_body_length)
         self.reset()
 
     def eom(self):
-        return self.read_pos > self.body_length
+        return self.read_pos >= self.body_length + self.header_length
 
     def set_max_length(self, max_length):
         self.max_body_length = max_length - self.header_length
@@ -175,93 +197,154 @@ class Message:
         self.current_datatype_count = self.current_datatype_count_max
         return self.message_buffer[self.read_pos - self.current_datatype_count_max:self.read_pos].decode('utf-8')
 
+    def read_matrix_id(self):
+        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
+            self.read_next_datatype()
+        self.read_pos += 2
+        self.current_datatype_count += 1
+        return int.from_bytes(self.message_buffer[self.read_pos-2:self.read_pos], 'big')
+
     # Writing data
     def start(self, client_id, session_id, command):
         self.message_buffer[0:2] = client_id.to_bytes(2, 'big')
         self.message_buffer[2:4] = session_id.to_bytes(2, 'big')
         self.message_buffer[4] = self.commands[command]
 
+        return self
+
     def add_header(self, header):
         self.message_buffer[0:self.header_length] = header
         self.read_header()
+
+        return self
         
     def add_packet(self, packet):
         self.message_buffer[self.write_pos:self.write_pos + len(packet)] = packet
-        self.write_pos + len(packet)
+        self.write_pos += len(packet)
+
+        return self
 
     def put_byte(self, value, pos):
         self.message_buffer[pos] = value.to_bytes(1, 'big')[0]
 
-    def write_byte(self, value):
+    def write_byte(self, value=[]):
         self.check_datatype("BYTE")
-        self.put_byte(value, self.write_pos)
+        if len(value) > 0:
+            self.put_byte(value, self.write_pos)
 
-        self.write_pos += 1
+            self.write_pos += 1
+
+        return self
 
     def put_char(self, value, pos):
         self.message_buffer[pos] = value.encode('utf-8')[0]
 
-    def write_char(self, value):
+    def write_char(self, value=[]):
         self.check_datatype("CHAR")
-        self.put_char(value, self.write_pos)
+        if len(value) > 0:
+            self.put_char(value, self.write_pos)
 
-        self.write_pos += 1
+            self.write_pos += 1
+
+        return self
 
     def put_short(self, value, pos):
         self.message_buffer[pos:pos+2] = value.to_bytes(2, 'big')
 
-    def write_short(self, value):
+    def write_short(self, value=[]):
         self.check_datatype("SHORT")
-        self.put_short(value, self.write_pos)
+        if len(value) > 0:
+            self.put_short(value, self.write_pos)
 
-        self.write_pos += 2
+            self.write_pos += 2
+
+        return self
 
     def put_int(self, value, pos):
         self.message_buffer[pos:pos+4] = value.to_bytes(4, 'big')
 
-    def write_int(self, value):
+    def write_int(self, value=[]):
         self.check_datatype("INT")
-        self.put_int(value, self.write_pos)
+        if len(value) > 0:
+            self.put_int(value, self.write_pos)
 
-        self.write_pos += 4
+            self.write_pos += 4
+
+        return self
 
     def put_long(self, value, pos):
         self.message_buffer[pos:pos+8] = value.to_bytes(8, 'big')
 
-    def write_long(self, value):
+    def write_long(self, value=[]):
         self.check_datatype("LONG")
-        self.put_long(value, self.write_pos)
+        if len(value) > 0:
+            self.put_long(value, self.write_pos)
 
-        self.write_pos += 8
+            self.write_pos += 8
+
+        return self
 
     def put_float(self, value, pos):
         self.message_buffer[pos:pos+4] = struct.pack('>f', value)
 
-    def write_float(self, value):
+    def write_float(self, value=[]):
         self.check_datatype("FLOAT")
-        self.put_float(value, self.write_pos)
+        if len(value) > 0:
+            self.put_float(value, self.write_pos)
 
-        self.write_pos += 4
+            self.write_pos += 4
+
+        return self
 
     def put_double(self, value, pos):
         self.message_buffer[pos:pos+8] = struct.pack('>d', value)
 
-    def write_double(self, value):
+    def write_double(self, value=[]):
         self.check_datatype("DOUBLE")
-        self.put_double(value, self.write_pos)
+        if len(value) > 0:
+            self.put_double(value, self.write_pos)
 
-        self.write_pos += 8
+            self.write_pos += 8
+
+        return self
 
     def put_string(self, value, pos, length):
         self.message_buffer[pos:pos+length] = value.encode('utf-8')
 
-    def write_string(self, value):
+    def write_string(self, value=[]):
         self.check_datatype("STRING")
-        self.current_datatype_count = len(value)
-        self.put_string(value, self.write_pos, self.current_datatype_count)
+        if len(value) > 0:
+            self.current_datatype_count = len(value)
+            self.put_string(value, self.write_pos, self.current_datatype_count)
 
-        self.write_pos += self.current_datatype_count
+            self.write_pos += self.current_datatype_count
         self.current_datatype = self.datatypes["NONE"]
+
+        return self
+
+    def put_matrix_id(self, value, pos):
+        self.message_buffer[pos:pos+2] = value.to_bytes(2, 'big')
+
+    def write_matrix_id(self, value=[]):
+        self.check_datatype("SHORT")
+        if len(value) > 0:
+            self.put_matrix_id(value, self.write_pos)
+
+            self.write_pos += 2
+
+        return self
+
+    def put_library_id(self, value, pos):
+        self.message_buffer[pos:pos+2] = value.to_bytes(2, 'big')
+
+    def write_library_id(self, value=[]):
+        self.check_datatype("SHORT")
+        if len(value) > 0:
+            self.put_library_id(value, self.write_pos)
+
+            self.write_pos += 2
+
+        return self
 
     # ========================================================================================
 
