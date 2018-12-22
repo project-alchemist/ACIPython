@@ -1,6 +1,5 @@
 import numpy as np
 from .Parameter import Parameter
-from .datatypes import datatypes
 import struct
 
 
@@ -38,6 +37,20 @@ class Message:
                 "RUN_TASK": 41,
                 # Shutting down
                 "SHUTDOWN": 99}
+
+    datatypes = {"NONE": 0,
+                 "BYTE": 18,
+                 "SHORT": 34,
+                 "INT": 35,
+                 "LONG": 36,
+                 "FLOAT": 15,
+                 "DOUBLE": 16,
+                 "CHAR": 1,
+                 "STRING": 46,
+                 "COMMAND_CODE": 47,
+                 "LIBRARY": 48,
+                 "MATRIX": 49,
+                 "MATRIX_HANDLE": 50}
 
     message_buffer = bytearray(header_length)
 
@@ -227,97 +240,89 @@ class Message:
     def put_byte(self, value, pos):
         self.message_buffer[pos] = value.to_bytes(1, 'big')[0]
 
-    def write_byte(self, value=[]):
+    def write_byte(self, value):
         self.check_datatype("BYTE")
-        if len(value) > 0:
-            self.put_byte(value, self.write_pos)
+        self.put_byte(value, self.write_pos)
 
-            self.write_pos += 1
+        self.write_pos += 1
 
         return self
 
     def put_char(self, value, pos):
         self.message_buffer[pos] = value.encode('utf-8')[0]
 
-    def write_char(self, value=[]):
+    def write_char(self, value):
         self.check_datatype("CHAR")
-        if len(value) > 0:
-            self.put_char(value, self.write_pos)
+        self.put_char(value, self.write_pos)
 
-            self.write_pos += 1
+        self.write_pos += 1
 
         return self
 
     def put_short(self, value, pos):
         self.message_buffer[pos:pos+2] = value.to_bytes(2, 'big')
 
-    def write_short(self, value=[]):
+    def write_short(self, value):
         self.check_datatype("SHORT")
-        if len(value) > 0:
-            self.put_short(value, self.write_pos)
+        self.put_short(value, self.write_pos)
 
-            self.write_pos += 2
+        self.write_pos += 2
 
         return self
 
     def put_int(self, value, pos):
         self.message_buffer[pos:pos+4] = value.to_bytes(4, 'big')
 
-    def write_int(self, value=[]):
+    def write_int(self, value):
         self.check_datatype("INT")
-        if len(value) > 0:
-            self.put_int(value, self.write_pos)
+        self.put_int(value, self.write_pos)
 
-            self.write_pos += 4
+        self.write_pos += 4
 
         return self
 
     def put_long(self, value, pos):
         self.message_buffer[pos:pos+8] = value.to_bytes(8, 'big')
 
-    def write_long(self, value=[]):
+    def write_long(self, value):
         self.check_datatype("LONG")
-        if len(value) > 0:
-            self.put_long(value, self.write_pos)
+        self.put_long(value, self.write_pos)
 
-            self.write_pos += 8
+        self.write_pos += 8
 
         return self
 
     def put_float(self, value, pos):
         self.message_buffer[pos:pos+4] = struct.pack('>f', value)
 
-    def write_float(self, value=[]):
+    def write_float(self, value):
         self.check_datatype("FLOAT")
-        if len(value) > 0:
-            self.put_float(value, self.write_pos)
+        self.put_float(value, self.write_pos)
 
-            self.write_pos += 4
+        self.write_pos += 4
 
         return self
 
     def put_double(self, value, pos):
         self.message_buffer[pos:pos+8] = struct.pack('>d', value)
 
-    def write_double(self, value=[]):
+    def write_double(self, value):
         self.check_datatype("DOUBLE")
-        if len(value) > 0:
-            self.put_double(value, self.write_pos)
+        self.put_double(value, self.write_pos)
 
-            self.write_pos += 8
+        self.write_pos += 8
 
         return self
 
     def put_string(self, value, pos, length):
         self.message_buffer[pos:pos+length] = value.encode('utf-8')
 
-    def write_string(self, value=[]):
+    def write_string(self, value):
         self.check_datatype("STRING")
-        if len(value) > 0:
-            self.current_datatype_count = len(value)
-            self.put_string(value, self.write_pos, self.current_datatype_count)
+        self.current_datatype_count = len(value)
+        self.put_string(value, self.write_pos, self.current_datatype_count)
 
-            self.write_pos += self.current_datatype_count
+        self.write_pos += self.current_datatype_count
         self.current_datatype = self.datatypes["NONE"]
 
         return self
@@ -325,24 +330,22 @@ class Message:
     def put_matrix_id(self, value, pos):
         self.message_buffer[pos:pos+2] = value.to_bytes(2, 'big')
 
-    def write_matrix_id(self, value=[]):
+    def write_matrix_id(self, value):
         self.check_datatype("SHORT")
-        if len(value) > 0:
-            self.put_matrix_id(value, self.write_pos)
+        self.put_matrix_id(value, self.write_pos)
 
-            self.write_pos += 2
+        self.write_pos += 2
 
         return self
 
     def put_library_id(self, value, pos):
         self.message_buffer[pos:pos+2] = value.to_bytes(2, 'big')
 
-    def write_library_id(self, value=[]):
+    def write_library_id(self, value):
         self.check_datatype("SHORT")
-        if len(value) > 0:
-            self.put_library_id(value, self.write_pos)
+        self.put_library_id(value, self.write_pos)
 
-            self.write_pos += 2
+        self.write_pos += 2
 
         return self
 

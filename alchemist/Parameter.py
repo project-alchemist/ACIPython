@@ -1,4 +1,3 @@
-from .datatypes import datatypes
 import struct
 
 
@@ -7,6 +6,20 @@ class Parameter:
     name = []
     datatype = []
     value = []
+
+    datatypes = {"NONE": 0,
+                 "BYTE": 18,
+                 "SHORT": 34,
+                 "INT": 35,
+                 "LONG": 36,
+                 "FLOAT": 15,
+                 "DOUBLE": 16,
+                 "CHAR": 1,
+                 "STRING": 46,
+                 "COMMAND_CODE": 47,
+                 "LIBRARY": 48,
+                 "MATRIX": 49,
+                 "MATRIX_HANDLE": 50}
 
     def __init__(self, name, datatype, value=[]):
         self.name = name

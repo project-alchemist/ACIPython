@@ -9,11 +9,7 @@ def truncated_svd(als, mh, rank):
     in_args["A"] = Parameter("A", "MATRIX", mh)
     in_args["rank"] = Parameter("rank", "INT", rank)
 
-    out_args["S"] = Parameter("S", "MATRIX")
-    out_args["U"] = Parameter("U", "MATRIX")
-    out_args["V"] = Parameter("V", "MATRIX")
-
-    out_args = als.run_task(in_args, out_args)
+    out_args = als.run_task(in_args)
 
     S = out_args["S"].value
     U = out_args["U"].value
@@ -46,10 +42,6 @@ class TestLib:
                 elif key == "rank":
                     in_args[key] = Parameter(key, "INT", value)
 
-            out_args["S"] = Parameter("S", "MATRIX")
-            out_args["U"] = Parameter("U", "MATRIX")
-            out_args["V"] = Parameter("V", "MATRIX")
-
-        return in_args, out_args
+        return in_args
 
 

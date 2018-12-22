@@ -147,12 +147,11 @@ class DriverClient:
 
         return self.libraries[name]
 
-    def run_task(self, lh, name, in_args, out_args):
+    def run_task(self, lh, name, in_args):
         self.start_message("RUN_TASK")
         self.output_message.write_library_ID(lh.ID)
         self.output_message.write_string(name)
         for key, value in in_args.items():
-            self.output_message.write_bool(True)            # 'True' to flag next parameter is an input parameter
             self.output_message.write_string(value.name)
             if value.datatype == "BYTE":
                 self.output_message.write_byte(value.value)
@@ -170,60 +169,13 @@ class DriverClient:
                 self.output_message.write_char(value.value)
             elif value.datatype == "STRING":
                 self.output_message.write_string(value.value)
-            elif value.datatype == "MATRIX":
+            elif value.datatype == "MATRIX_ID":
                 self.output_message.write_matrix_id(value.value.ID)
-        for key, value in out_args.items():
-            self.output_message.write_bool(False)           # 'False' to flag next parameter is an output parameter
-            self.output_message.write_string(value.name)
-            if value.datatype == "BYTE":
-                self.output_message.write_byte()
-            elif value.datatype == "SHORT":
-                self.output_message.write_short()
-            elif value.datatype == "INT":
-                self.output_message.write_int()
-            elif value.datatype == "LONG":
-                self.output_message.write_long()
-            elif value.datatype == "FLOAT":
-                self.output_message.write_float()
-            elif value.datatype == "DOUBLE":
-                self.output_message.write_double()
-            elif value.datatype == "CHAR":
-                self.output_message.write_char()
-            elif value.datatype == "STRING":
-                self.output_message.write_string()
-            elif value.datatype == "MATRIX":
-                self.output_message.write_matrix_id()
 
         self.send_message()
         self.receive_message()
 
-        while not self.input_message.eom():
-            name = self.input_message.read_string()
-            for key in out_args.keys():
-                if name == out_args[key].name:
-                    if out_args[key].datatype == "BYTE":
-                        out_args[key].set_value(self.input_message.read_byte())
-                    elif out_args[key].datatype == "SHORT":
-                        out_args[key].set_value(self.input_message.read_short())
-                    elif out_args[key].datatype == "INT":
-                        out_args[key].set_value(self.input_message.read_int())
-                    elif out_args[key].datatype == "LONG":
-                        out_args[key].set_value(self.input_message.read_long())
-                    elif out_args[key].datatype == "FLOAT":
-                        out_args[key].set_value(self.input_message.read_float())
-                    elif out_args[key].datatype == "DOUBLE":
-                        out_args[key].set_value(self.input_message.read_double())
-                    elif out_args[key].datatype == "CHAR":
-                        out_args[key].set_value(self.input_message.read_char())
-                    elif out_args[key].datatype == "STRING":
-                        out_args[key].set_value(self.input_message.read_string())
-                    elif out_args[key].datatype == "MATRIX":
-                        matrix_id = self.input_message.read_matrix_id()
-                        num_rows = self.input_message.read_long()
-                        num_cols = self.input_message.read_long()
-                        row_layout = self.extract_layout(num_rows)
-
-                        out_args[key].set_value(MatrixHandle(matrix_id, 'dense', num_rows, num_cols, 1, row_layout))
+        out_args = in_args
 
         return out_args
 

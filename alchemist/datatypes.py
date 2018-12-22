@@ -8,5 +8,6 @@ datatypes = {"NONE": 0,
              "CHAR": 1,
              "STRING": 46,
              "COMMAND_CODE": 47,
-             "MATRIX": 48,
-             "LIBRARY": 49}
+             "LIBRARY": 48,
+             "MATRIX": 49,
+             "MATRIX_HANDLE": 50}

@@ -104,13 +104,13 @@ class AlchemistSession:
     #     print("Elapsed time for truncated SVD is " + str(end - start))
     #     return out
 
-    def run_task(self, lh, name, in_args, out_args):
+    def run_task(self, lh, name, in_args):
         print("Alchemist started task " + name + " - please wait ... ", end="", flush=True)
         start = time.time()
-        out = self.driver.run_task(lh, name, in_args, out_args)
+        out_args = self.driver.run_task(lh, name, in_args)
         end = time.time()
         print("done (" + str(end - start) + ")")
-        return out
+        return out_args
 
     def connect_to_alchemist(self, address, port):
         self.driver.address = address
