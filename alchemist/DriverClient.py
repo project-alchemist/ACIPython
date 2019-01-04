@@ -2,7 +2,8 @@ import socket
 import time
 import numpy as np
 from .Message import Message
-from .LibraryHandle import TestLib
+from .Parameter import Parameter
+from .LibraryHandle import LibraryHandle
 from .MatrixHandle import MatrixHandle
 from .WorkerClient import WorkerInfo
 
@@ -16,12 +17,11 @@ class DriverClient:
 
     client_id = 0
     session_id = 0
+    library_id = 0
 
     max_alchemist_workers = 0
 
     sock = []
-
-    libraries = {}
 
     input_message = Message()
     output_message = Message()
@@ -135,22 +135,29 @@ class DriverClient:
 
     def load_library(self, name, path=""):
 
-        if name == "TestLib":
-            path = "/Users/kai/Projects/AlLib/target/allib.dylib"
-            self.libraries[name] = TestLib(name, path)
-
         self.start_message("LOAD_LIBRARY")
         self.output_message.write_string(name)
         self.output_message.write_string(path)
         self.send_message()
         self.receive_message()
 
-        return self.libraries[name]
+        self.input_message.print()
+        lh = LibraryHandle(self.input_message.read_short(), name, path)
 
-    def run_task(self, lh, name, in_args):
+        return lh
+
+    def run_task(self, lib_id, task_name, in_args):
         self.start_message("RUN_TASK")
-        self.output_message.write_library_ID(lh.ID)
-        self.output_message.write_string(name)
+        self.output_message.write_library_id(lib_id)
+        self.output_message.write_string(task_name)
+        self.serialize_parameters(in_args)
+        self.send_message()
+        self.receive_message()
+
+        return self.deserialize_parameters()
+
+    def serialize_parameters(self, in_args):
+
         for key, value in in_args.items():
             self.output_message.write_string(value.name)
             if value.datatype == "BYTE":
@@ -169,16 +176,38 @@ class DriverClient:
                 self.output_message.write_char(value.value)
             elif value.datatype == "STRING":
                 self.output_message.write_string(value.value)
-            elif value.datatype == "MATRIX_ID":
+            elif value.datatype == "MATRIX":
                 self.output_message.write_matrix_id(value.value.ID)
 
-        self.send_message()
-        self.receive_message()
+    def deserialize_parameters(self):
 
-        out_args = in_args
+        out_args = {}
+
+        while not self.input_message.eom():
+            parameter_name = self.input_message.read_string()
+
+            parameter_datatype = self.input_message.preview_next_datatype()
+
+            if parameter_datatype == "BYTE":
+                out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_byte())
+            elif parameter_datatype == "SHORT":
+                out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_short())
+            elif parameter_datatype == "INT":
+                out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_int())
+            elif parameter_datatype == "LONG":
+                out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_long())
+            elif parameter_datatype == "FLOAT":
+                out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_float())
+            elif parameter_datatype == "DOUBLE":
+                out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_double())
+            elif parameter_datatype == "CHAR":
+                out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_char())
+            elif parameter_datatype == "STRING":
+                out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_string())
+            elif parameter_datatype == "MATRIX":
+                out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_matrix())
 
         return out_args
-
 
     # def truncated_svd(self, lh, name, mh, rank):
     #     method = 0

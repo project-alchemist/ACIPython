@@ -145,6 +145,9 @@ class Message:
 
         self.read_pos += 5
 
+    def preview_next_datatype(self):
+        return self.get_datatype_name(self.message_buffer[self.read_pos])
+
     def get_current_datatype(self):
         return self.current_datatype
 

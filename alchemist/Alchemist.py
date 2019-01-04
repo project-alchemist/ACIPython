@@ -2,6 +2,7 @@ from .DriverClient import DriverClient
 from .WorkerClient import WorkerClients
 import h5py
 import time
+import os
 import importlib
 import numpy as np
 import pandas as pd
@@ -90,10 +91,20 @@ class AlchemistSession:
 
         return self.driver.send_matrix_info(num_rows, num_cols)
 
-    def load_library(self, name):
-        self.libraries[lh] = importlib("Libraries/" + name)
-        lh = self.driver.load_library(name)
-        return lh
+    def load_library(self, name, path=""):
+        if self.workers_connected:
+            lh = self.driver.load_library(name, path)
+            module = importlib.import_module("alchemist.lib." + name + "." + name)
+            library = getattr(module, name)()
+
+            msg = 'The {module_name} module has the following methods: {methods}'
+            print(msg.format(module_name=name, methods=dir(library)))
+
+            library.set_id(lh.id)
+            library.set_alchemist_session(self)
+
+            self.libraries[lh.id] = library
+            return library
 
     # def run_task(self, lh, name, **kwargs):
     #     print("Alchemist started task " + name + " - please wait ...")
@@ -104,13 +115,20 @@ class AlchemistSession:
     #     print("Elapsed time for truncated SVD is " + str(end - start))
     #     return out
 
-    def run_task(self, lh, name, in_args):
-        print("Alchemist started task " + name + " - please wait ... ", end="", flush=True)
+    def run_task(self, lib_id, name, in_args):
+        print("Alchemist started task '" + name + "' ... ", end="", flush=True)
         start = time.time()
-        out_args = self.driver.run_task(lh, name, in_args)
+        out_args = self.driver.run_task(lib_id, name, in_args)
         end = time.time()
         print("done (" + str(end - start) + ")")
         return out_args
+
+    def display_parameters(self, parameters, preamble="", spacing=""):
+
+        if len(preamble) > 0:
+            print(preamble)
+        for key, value in parameters.items():
+            print(spacing + key + " = " + str(value.value) + " (" + value.datatype + ")")
 
     def connect_to_alchemist(self, address, port):
         self.driver.address = address
@@ -154,15 +172,6 @@ class AlchemistSession:
             parquet_writer.write_table(table)
 
         parquet_writer.close()
-
-    def load_library(self, lib_name):
-        if self.workers_connected:
-            lib = self.driver.load_library(lib_name)
-            print("Library " + lib_name + " loaded")
-            return lib
-        else:
-            print("Connect to Alchemist workers first")
-            return []
 
     def load_from_hdf5(self, file_name, dataset_name):
         return self.driver.load_from_hdf5(file_name, dataset_name)
