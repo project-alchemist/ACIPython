@@ -16,10 +16,9 @@ class Parameter:
                  "DOUBLE": 16,
                  "CHAR": 1,
                  "STRING": 46,
-                 "COMMAND_CODE": 47,
-                 "LIBRARY": 48,
-                 "MATRIX": 49,
-                 "MATRIX_HANDLE": 50}
+                 "COMMAND_CODE": 48,
+                 "MATRIX_ID": 49,
+                 "LIBRARY_ID": 50}
 
     def __init__(self, name, datatype, value=[]):
         self.name = name

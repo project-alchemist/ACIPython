@@ -32,21 +32,21 @@ class TestLib:
 
             for key, value in kwargs.items():
                 if key == "A":
-                    in_args[key] = Parameter(key, "MATRIX", value)
+                    in_args[key] = Parameter(key, "MATRIX_ID", value)
                 elif key == "rank":
                     in_args[key] = Parameter(key, "INT", value)
 
         return in_args
 
-    def truncated_SVD(self, A, rank):
+    def truncated_svd(self, A, rank):
 
         in_args = {}
-        in_args["A"] = Parameter("A", "MATRIX", A)
+        in_args["A"] = Parameter("A", "MATRIX_ID", A.id)
         in_args["rank"] = Parameter("rank", "INT", rank)
 
         self.als.display_parameters(in_args, "List of input parameters:")
 
-        self.output_parameters = self.als.run_task(self.id, "greet", in_args)
+        self.output_parameters = self.als.run_task(self.id, "truncated_svd", in_args)
 
         self.als.display_parameters(self.output_parameters, "List of output parameters:")
 

@@ -47,10 +47,9 @@ class Message:
                  "DOUBLE": 16,
                  "CHAR": 1,
                  "STRING": 46,
-                 "COMMAND_CODE": 47,
-                 "LIBRARY": 48,
-                 "MATRIX": 49,
-                 "MATRIX_HANDLE": 50}
+                 "COMMAND_CODE": 48,
+                 "MATRIX_ID": 49,
+                 "LIBRARY_ID": 50}
 
     message_buffer = bytearray(header_length)
 
@@ -220,6 +219,13 @@ class Message:
         self.current_datatype_count += 1
         return int.from_bytes(self.message_buffer[self.read_pos-2:self.read_pos], 'big')
 
+    def read_library_id(self):
+        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
+            self.read_next_datatype()
+        self.read_pos += 2
+        self.current_datatype_count += 1
+        return int.from_bytes(self.message_buffer[self.read_pos-2:self.read_pos], 'big')
+
     # Writing data
     def start(self, client_id, session_id, command):
         self.message_buffer[0:2] = client_id.to_bytes(2, 'big')
@@ -334,7 +340,7 @@ class Message:
         self.message_buffer[pos:pos+2] = value.to_bytes(2, 'big')
 
     def write_matrix_id(self, value):
-        self.check_datatype("SHORT")
+        self.check_datatype("MATRIX_ID")
         self.put_matrix_id(value, self.write_pos)
 
         self.write_pos += 2
@@ -345,7 +351,7 @@ class Message:
         self.message_buffer[pos:pos+2] = value.to_bytes(2, 'big')
 
     def write_library_id(self, value):
-        self.check_datatype("SHORT")
+        self.check_datatype("LIBRARY_ID")
         self.put_library_id(value, self.write_pos)
 
         self.write_pos += 2

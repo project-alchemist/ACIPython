@@ -4,9 +4,9 @@ import random as rnd
 
 class MatrixHandle:
 
-    id = 1
+    id = 0
 
-    type = 'dense'
+    sparse = False
 
     num_rows = 0
     num_cols = 0
@@ -15,25 +15,17 @@ class MatrixHandle:
 
     row_layout = []
 
-    def __init__(self):
-        self.id = 0
-        self.type = 'dense'
-        self.data_type = 'f'
-        self.num_rows = 0
-        self.num_cols = 0
-        self.num_partitions = 0
-
-    def __init__(self, id, type, num_rows, num_cols, num_partitions, row_layout):
+    def __init__(self, id=0, sparse=False, num_rows=0, num_cols=0, num_partitions=0, row_layout=[]):
         self.id = id
-        self.type = type
+        self.sparse = sparse
         self.num_rows = num_rows
         self.num_cols = num_cols
         self.num_partitions = num_partitions
         self.row_layout = row_layout
 
-    def set(self, id, type, num_rows, num_cols, num_partitions, row_layout):
+    def set(self, id, sparse, num_rows, num_cols, num_partitions, row_layout):
         self.id = id
-        self.type = type
+        self.sparse = sparse
         self.num_rows = num_rows
         self.num_cols = num_cols
         self.num_partitions = num_partitions
@@ -44,8 +36,8 @@ class MatrixHandle:
         self.id = id
         return self
 
-    def set_type(self, type):
-        self.type = type
+    def set_sparse(self, sparse):
+        self.sparse = sparse
         return self
 
     def set_num_rows(self, num_rows):
@@ -75,7 +67,7 @@ class MatrixHandle:
 
     def meta(self):
         print("ID:                    {}".format(self.id))
-        print("Type:                  {}".format(self.type))
+        print("Sparse:                {}".format(self.sparse))
         print(" ")
         print("Number of rows:        {}".format(self.num_rows))
         print("Number of columns:     {}".format(self.num_cols))
