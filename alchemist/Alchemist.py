@@ -87,9 +87,14 @@ class AlchemistSession:
         return data
 
     def get_matrix_handle(self, data):
+        print("Sending matrix info to Alchemist ... ", end="", flush=True)
+        start = time.time()
         (num_rows, num_cols) = data.shape
 
-        return self.driver.send_matrix_info(num_rows, num_cols)
+        mh = self.driver.send_matrix_info(num_rows, num_cols)
+        end = time.time()
+        print("done (" + str(end - start) + ")")
+        return mh
 
     def load_library(self, name, path=""):
         if self.workers_connected:

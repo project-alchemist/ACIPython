@@ -211,44 +211,9 @@ class DriverClient:
             elif parameter_datatype == "LIBRARY_ID":
                 out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_library_id())
 
-
         return out_args
 
-    # def truncated_svd(self, lh, name, mh, rank):
-    #     method = 0
-    #     self.start_message("RUN_TASK")
-    #     self.output_message.write_string(name)
-    #     self.output_message.write_short(mh.id)
-    #     self.output_message.write_int(rank)
-    #     self.output_message.write_byte(method)
-    #     self.send_message()
-    #     self.receive_message()
-    #
-    #     matrix_id = self.input_message.read_short()
-    #     num_rows = self.input_message.read_long()
-    #     num_cols = self.input_message.read_long()
-    #     row_layout = self.extract_layout(num_rows)
-    #
-    #     U = MatrixHandle().set(matrix_id, 'dense', num_rows, num_cols, 1, row_layout)
-    #
-    #     matrix_id = self.input_message.read_short()
-    #     num_rows = self.input_message.read_long()
-    #     num_cols = self.input_message.read_long()
-    #     row_layout = self.extract_layout(num_rows)
-    #
-    #     S = MatrixHandle().set(matrix_id, 'dense', num_rows, num_cols, 1, row_layout)
-    #
-    #     matrix_id = self.input_message.read_short()
-    #     num_rows = self.input_message.read_long()
-    #     num_cols = self.input_message.read_long()
-    #     row_layout = self.extract_layout(num_rows)
-    #
-    #     V = MatrixHandle().set(matrix_id, 'dense', num_rows, num_cols, 1, row_layout)
-    #
-    #     return U, S, V
-
     def send_matrix_info(self, num_rows, num_cols, sparse=False):
-        print("Sending matrix info to Alchemist ...", end="", flush=True)
         self.start_message("MATRIX_INFO")
         if sparse:
             self.output_message.write_byte(1)               # Type: sparse
@@ -260,13 +225,11 @@ class DriverClient:
         self.send_message()
         self.receive_message()
 
-        # self.input_message.print()
+        self.input_message.print()
         matrix_id = self.input_message.read_short()
         num_rows = self.input_message.read_long()
         num_cols = self.input_message.read_long()
         row_layout = self.extract_layout(num_rows)
-
-        print("done")
 
         return MatrixHandle(matrix_id, sparse, num_rows, num_cols, 1, row_layout)
 
