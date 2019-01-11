@@ -176,10 +176,10 @@ class DriverClient:
                 self.output_message.write_char(value.value)
             elif value.datatype == "STRING":
                 self.output_message.write_string(value.value)
-            elif value.datatype == "MATRIX_ID":
-                self.output_message.write_matrix_id(value.value)
             elif value.datatype == "LIBRARY_ID":
                 self.output_message.write_library_id(value.value)
+            elif value.datatype == "MATRIX_ID":
+                self.output_message.write_matrix_id(value.value)
 
     def deserialize_parameters(self):
 
@@ -206,32 +206,29 @@ class DriverClient:
                 out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_char())
             elif parameter_datatype == "STRING":
                 out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_string())
-            elif parameter_datatype == "MATRIX_ID":
-                out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_matrix_id())
             elif parameter_datatype == "LIBRARY_ID":
                 out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_library_id())
+            elif parameter_datatype == "MATRIX_ID":
+                out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_matrix_id())
+            elif parameter_datatype == "MATRIX_INFO":
+                out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_matrix_info())
 
         return out_args
 
-    def send_matrix_info(self, num_rows, num_cols, sparse=False):
-        self.start_message("MATRIX_INFO")
+    def send_matrix_info(self, name="", num_rows=0, num_cols=0, sparse=False, layout=0):
+        self.start_message("SEND_MATRIX_INFO")
+        self.output_message.write_string(name)
+        self.output_message.write_long(num_rows)            # Number of rows
+        self.output_message.write_long(num_cols)            # Number of columns
         if sparse:
             self.output_message.write_byte(1)               # Type: sparse
         else:
             self.output_message.write_byte(0)               # Type: dense
         self.output_message.write_byte(0)                   # Layout: by rows (default)
-        self.output_message.write_long(num_rows)            # Number of rows
-        self.output_message.write_long(num_cols)            # Number of columns
         self.send_message()
         self.receive_message()
-
         self.input_message.print()
-        matrix_id = self.input_message.read_short()
-        num_rows = self.input_message.read_long()
-        num_cols = self.input_message.read_long()
-        row_layout = self.extract_layout(num_rows)
-
-        return MatrixHandle(matrix_id, sparse, num_rows, num_cols, 1, row_layout)
+        return self.input_message.read_matrix_info()
 
     def extract_layout(self, num_rows):
         layout = np.zeros(num_rows, dtype=np.int16)
@@ -291,7 +288,7 @@ class DriverClient:
         return deallocated_workers
 
     def get_matrix_info(self):
-        self.start_message("MATRIX_INFO")
+        self.start_message("REQUEST_MATRIX_INFO")
         return self.send_message
 
     def list_all_workers(self, preamble):

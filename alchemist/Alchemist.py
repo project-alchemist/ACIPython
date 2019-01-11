@@ -86,12 +86,12 @@ class AlchemistSession:
 
         return data
 
-    def get_matrix_handle(self, data):
+    def get_matrix_handle(self, data=[], name="", sparse=0, layout=0):
         print("Sending matrix info to Alchemist ... ", end="", flush=True)
         start = time.time()
         (num_rows, num_cols) = data.shape
 
-        mh = self.driver.send_matrix_info(num_rows, num_cols)
+        mh = self.driver.send_matrix_info(name, num_rows, num_cols, sparse, layout)
         end = time.time()
         print("done (" + str(end - start) + ")")
         return mh

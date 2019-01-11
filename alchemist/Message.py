@@ -1,5 +1,6 @@
 import numpy as np
 from .Parameter import Parameter
+from .MatrixHandle import MatrixHandle
 import struct
 
 
@@ -29,8 +30,8 @@ class Message:
                 "LOAD_LIBRARY": 22,
                 "UNLOAD_LIBRARY": 23,
                 # Matrices
-                "MATRIX_INFO": 31,
-                "MATRIX_LAYOUT": 32,
+                "SEND_MATRIX_INFO": 31,
+                "SEND_MATRIX_LAYOUT": 32,
                 "SEND_MATRIX_BLOCKS": 33,
                 "REQUEST_MATRIX_BLOCKS": 34,
                 # Tasks
@@ -39,7 +40,7 @@ class Message:
                 "SHUTDOWN": 99}
 
     datatypes = {"NONE": 0,
-                 "BYTE": 18,
+                 "BYTE": 33,
                  "SHORT": 34,
                  "INT": 35,
                  "LONG": 36,
@@ -48,8 +49,11 @@ class Message:
                  "CHAR": 1,
                  "STRING": 46,
                  "COMMAND_CODE": 48,
-                 "MATRIX_ID": 49,
-                 "LIBRARY_ID": 50}
+                 "PARAMETER": 49,
+                 "LIBRARY_ID": 50,
+                 "MATRIX_ID": 51,
+                 "MATRIX_INFO": 52,
+                 "DISTMATRIX": 53}
 
     message_buffer = bytearray(header_length)
 
@@ -208,23 +212,31 @@ class Message:
     def read_string(self):
         if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
             self.read_next_datatype()
-        self.read_pos += self.current_datatype_count_max
-        self.current_datatype_count = self.current_datatype_count_max
-        return self.message_buffer[self.read_pos - self.current_datatype_count_max:self.read_pos].decode('utf-8')
-
-    def read_matrix_id(self):
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
-        self.read_pos += 2
         self.current_datatype_count += 1
-        return int.from_bytes(self.message_buffer[self.read_pos-2:self.read_pos], 'big')
+        self.read_pos += 4
+        str_length = int.from_bytes(self.message_buffer[self.read_pos - 4:self.read_pos], 'big')
+        self.read_pos += str_length
+        return self.message_buffer[self.read_pos - str_length:self.read_pos].decode('utf-8')
 
     def read_library_id(self):
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
-        self.read_pos += 2
-        self.current_datatype_count += 1
-        return int.from_bytes(self.message_buffer[self.read_pos-2:self.read_pos], 'big')
+        return self.read_short()
+
+    def read_matrix_id(self):
+        return self.read_short()
+
+    def read_matrix_info(self):
+        matrix_id = self.read_matrix_id()
+        name = self.read_string()
+        num_rows = self.read_long()
+        num_cols = self.read_long()
+        sparse = self.read_char()
+        num_partitions = self.read_char()
+        layout = np.zeros(num_rows, dtype=np.int16)
+
+        for i in range(0, num_rows):
+            layout[i] = self.read_short()
+
+        return MatrixHandle(matrix_id, name, num_rows, num_cols, sparse, num_partitions, layout)
 
     # Writing data
     def start(self, client_id, session_id, command):
@@ -328,11 +340,10 @@ class Message:
 
     def write_string(self, value):
         self.check_datatype("STRING")
-        self.current_datatype_count = len(value)
-        self.put_string(value, self.write_pos, self.current_datatype_count)
-
-        self.write_pos += self.current_datatype_count
-        self.current_datatype = self.datatypes["NONE"]
+        self.put_int(len(value), self.write_pos)
+        self.write_pos += 4
+        self.put_string(value, self.write_pos, len(value))
+        self.write_pos += len(value)
 
         return self
 
@@ -357,6 +368,11 @@ class Message:
         self.write_pos += 2
 
         return self
+
+    # ========================================================================================
+
+    def preview_parameter(self, data, pos):
+        print("P")
 
     # ========================================================================================
 
@@ -391,7 +407,7 @@ class Message:
 
     def print(self):
 
-        space = "                        "
+        space = "                         "
 
         temp_client_id = int.from_bytes(self.message_buffer[0:2], 'big')
         temp_session_id = int.from_bytes(self.message_buffer[2:4], 'big')
@@ -400,10 +416,10 @@ class Message:
 
         print(" ")
         print("{} ==============================================".format(space))
-        print("{} Client ID:           {}".format(space, temp_client_id))
-        print("{} Session ID:          {}".format(space, temp_session_id))
-        print("{} Command code:        {} ({})".format(space, temp_command_code, self.get_command_name(temp_command_code)))
-        print("{} Message body length: {}".format(space, temp_body_length))
+        print("{} Client ID:            {}".format(space, temp_client_id))
+        print("{} Session ID:           {}".format(space, temp_session_id))
+        print("{} Command code:         {} ({})".format(space, temp_command_code, self.get_command_name(temp_command_code)))
+        print("{} Message body length:  {}".format(space, temp_body_length))
         print("{} ----------------------------------------------".format(space))
 
         i = self.header_length
@@ -413,37 +429,52 @@ class Message:
             data_array_type = self.get_datatype_name(self.message_buffer[i])
             data_array_length = int.from_bytes(self.message_buffer[i+1:i+5], 'big')
 
-            print("{} Datatype (length):   {} ({})".format(space, data_array_type, data_array_length))
+            print("{} Datatype (length):    {} ({})".format(space, data_array_type, data_array_length))
 
             data = ""
             i += 5
 
-            if data_array_type == "STRING":
-                data += self.message_buffer[i:i+data_array_length].decode('utf-8')
-                i += data_array_length
-            else:
-                for j in range(0, data_array_length):
-                    if data_array_type == "BYTE":
-                        data += str(self.message_buffer[i])
-                    elif data_array_type == "CHAR":
-                        data += str(self.message_buffer[i])
-                    elif data_array_type == "SHORT":
-                        data += str(int.from_bytes(self.message_buffer[i:i+2], 'big'))
-                    elif data_array_type == "INT":
-                        data += str(int.from_bytes(self.message_buffer[i:i+4], 'big'))
-                    elif data_array_type == "LONG":
-                        data += str(int.from_bytes(self.message_buffer[i:i+8], 'big'))
-                    elif data_array_type == "FLOAT":
-                        data += str(struct.unpack('>f', self.message_buffer[i:i+4])[0])
-                    elif data_array_type == "DOUBLE":
-                        data += str(struct.unpack('>d', self.message_buffer[i:i+8])[0])
+            for j in range(0, data_array_length):
+                if data_array_type == "BYTE":
+                    data += str(self.message_buffer[i]) + " "
+                    i += 1
+                elif data_array_type == "CHAR":
+                    data += str(self.message_buffer[i]) + " "
+                    i += 1
+                elif data_array_type == "SHORT":
+                    data += str(int.from_bytes(self.message_buffer[i:i+2], 'big')) + " "
+                    i += 2
+                elif data_array_type == "INT":
+                    data += str(int.from_bytes(self.message_buffer[i:i+4], 'big')) + " "
+                    i += 4
+                elif data_array_type == "LONG":
+                    data += str(int.from_bytes(self.message_buffer[i:i+8], 'big')) + " "
+                    i += 8
+                elif data_array_type == "FLOAT":
+                    data += str(struct.unpack('>f', self.message_buffer[i:i+4])[0]) + " "
+                    i += 4
+                elif data_array_type == "DOUBLE":
+                    data += str(struct.unpack('>d', self.message_buffer[i:i+8])[0]) + " "
+                    i += 8
+                elif data_array_type == "LIBRARY_ID":
+                    data += str(int.from_bytes(self.message_buffer[i:i+2], 'big')) + " "
+                    i += 2
+                elif data_array_type == "STRING":
+                    str_length = int.from_bytes(self.message_buffer[i:i + 4], 'big')
+                    i += 4
+                    data += self.message_buffer[i:i + str_length].decode('utf-8')
+                    i += str_length
+                    if j < data_array_length-1:
+                        data += "\n" + space + "                       "
+                elif data_array_type == "PARAMETER":
+                    str_length = int.from_bytes(self.message_buffer[i:i + 4], 'big')
+                    i += 4
+                    data += self.message_buffer[i:i + str_length].decode('utf-8')
+                    i += str_length
+                    if j < data_array_length-1:
+                        data += "\n" + space + "                       "
 
-                    data += " "
-
-                    datatype_length = {"BYTE": 1, "CHAR": 1, "SHORT": 2, "INT": 4, "LONG": 8, "FLOAT": 4, "DOUBLE": 8}.get(data_array_type, 4)
-                    i += datatype_length
-
-            print("{} Data:                {}".format(space, data))
+            print("{} Data:                 {}".format(space, data))
             if i < self.header_length + temp_body_length:
                 print(" ")
 

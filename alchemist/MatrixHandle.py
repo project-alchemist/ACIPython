@@ -6,6 +6,8 @@ class MatrixHandle:
 
     id = 0
 
+    name = ""
+
     sparse = False
 
     num_rows = 0
@@ -15,19 +17,21 @@ class MatrixHandle:
 
     row_layout = []
 
-    def __init__(self, id=0, sparse=False, num_rows=0, num_cols=0, num_partitions=0, row_layout=[]):
+    def __init__(self, id=0, name="", num_rows=0, num_cols=0, sparse=False, num_partitions=0, row_layout=[]):
         self.id = id
-        self.sparse = sparse
+        self.name = name
         self.num_rows = num_rows
         self.num_cols = num_cols
+        self.sparse = sparse
         self.num_partitions = num_partitions
         self.row_layout = row_layout
 
-    def set(self, id, sparse, num_rows, num_cols, num_partitions, row_layout):
+    def set(self, id, name="", num_rows=0, num_cols=0, sparse=False, num_partitions=0, row_layout=[]):
         self.id = id
-        self.sparse = sparse
+        self.name = name
         self.num_rows = num_rows
         self.num_cols = num_cols
+        self.sparse = sparse
         self.num_partitions = num_partitions
         self.row_layout = row_layout
         return self
@@ -36,8 +40,8 @@ class MatrixHandle:
         self.id = id
         return self
 
-    def set_sparse(self, sparse):
-        self.sparse = sparse
+    def set_name(self, name):
+        self.name = name
         return self
 
     def set_num_rows(self, num_rows):
@@ -46,6 +50,10 @@ class MatrixHandle:
 
     def set_num_cols(self, num_cols):
         self.num_cols = num_cols
+        return self
+
+    def set_sparse(self, sparse):
+        self.sparse = sparse
         return self
 
     def set_num_partitions(self, num_partitions):
@@ -58,20 +66,24 @@ class MatrixHandle:
 
     def fetch(self, mode='all'):
         data = 0
-        if mode == 'diagonal':
-            data = np.transpose(sorted((100*np.random.rand(self.num_rows, 1) + 20), reverse=True))
+        # if mode == 'diagonal':
+            # data = np.transpose(sorted((100*np.random.rand(self.num_rows, 1) + 20), reverse=True))
             # data = np.random.rand(self.num_rows, 1).tolist()
             # print("{}".format(data))
 
         return data
 
-    def meta(self):
+    def meta(self, display_layout=False):
         print("ID:                    {}".format(self.id))
-        print("Sparse:                {}".format(self.sparse))
+        print("Name:                  {}".format(self.name))
         print(" ")
         print("Number of rows:        {}".format(self.num_rows))
         print("Number of columns:     {}".format(self.num_cols))
-        # print(" ")
-        # print("Number of partitions:  {}".format(self.num_partitions))
+        print(" ")
+        print("Sparse:                {}".format(self.sparse))
+        print("Number of partitions:  {}".format(self.num_partitions))
+        if display_layout:
+            print(" ")
+            print("Layout:                {}".format(self.row_layout))
 
 

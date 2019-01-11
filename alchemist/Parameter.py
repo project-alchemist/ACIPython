@@ -7,8 +7,7 @@ class Parameter:
     datatype = []
     value = []
 
-    datatypes = {"NONE": 0,
-                 "BYTE": 18,
+    datatypes = {"BYTE": 33,
                  "SHORT": 34,
                  "INT": 35,
                  "LONG": 36,
@@ -16,9 +15,7 @@ class Parameter:
                  "DOUBLE": 16,
                  "CHAR": 1,
                  "STRING": 46,
-                 "COMMAND_CODE": 48,
-                 "MATRIX_ID": 49,
-                 "LIBRARY_ID": 50}
+                 "MATRIX_INFO": 52}
 
     def __init__(self, name, datatype, value=[]):
         self.name = name
