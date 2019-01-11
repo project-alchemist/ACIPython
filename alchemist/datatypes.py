@@ -8,7 +8,8 @@
                  "CHAR": 1,
                  "STRING": 46,
                  "COMMAND_CODE": 48,
-                 "LIBRARY_ID": 49,
-                 "MATRIX_ID": 50,
-                 "MATRIX_INFO": 51,
-                 "DISTMATRIX": 52}
+                 "PARAMETER": 49,
+                 "LIBRARY_ID": 50,
+                 "MATRIX_ID": 51,
+                 "MATRIX_INFO": 52,
+                 "DISTMATRIX": 53}

@@ -74,8 +74,8 @@ class MatrixHandle:
         return data
 
     def meta(self, display_layout=False):
-        print("ID:                    {}".format(self.id))
         print("Name:                  {}".format(self.name))
+        print("ID:                    {}".format(self.id))
         print(" ")
         print("Number of rows:        {}".format(self.num_rows))
         print("Number of columns:     {}".format(self.num_cols))
