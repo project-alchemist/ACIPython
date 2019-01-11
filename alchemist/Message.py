@@ -151,6 +151,9 @@ class Message:
     def preview_next_datatype(self):
         return self.get_datatype_name(self.message_buffer[self.read_pos])
 
+    def preview_next_datatype_count(self):
+        return int.from_bytes(self.message_buffer[self.read_pos+1:self.read_pos+5], 'big')
+
     def get_current_datatype(self):
         return self.current_datatype
 
@@ -218,6 +221,10 @@ class Message:
         self.read_pos += str_length
         return self.message_buffer[self.read_pos - str_length:self.read_pos].decode('utf-8')
 
+    def read_parameter(self):
+        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
+            self.read_next_datatype()
+
     def read_library_id(self):
         return self.read_short()
 
@@ -225,18 +232,33 @@ class Message:
         return self.read_short()
 
     def read_matrix_info(self):
-        matrix_id = self.read_matrix_id()
-        name = self.read_string()
-        num_rows = self.read_long()
-        num_cols = self.read_long()
-        sparse = self.read_char()
-        num_partitions = self.read_char()
-        layout = np.zeros(num_rows, dtype=np.int16)
+        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
+            self.read_next_datatype()
+        self.current_datatype_count += 1
+        matrix_id = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 2], 'big')
+        self.read_pos += 2
+        name_length = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 4], 'big')
+        self.read_pos += 4
+        name = " "
+        if name_length > 0:
+            name = self.message_buffer[self.read_pos:self.read_pos + name_length].decode('utf-8')
+            self.read_pos += name_length
+        num_rows = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 8], 'big')
+        self.read_pos += 8
+        num_cols = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 8], 'big')
+        self.read_pos += 8
+        sparse = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 1], 'big')
+        self.read_pos += 1
+        layout = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 1], 'big')
+        self.read_pos += 1
+        num_partitions = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 1], 'big')
+        self.read_pos += 1
+        mh = MatrixHandle(matrix_id, name, num_rows, num_cols, sparse, num_partitions, [])
+        for _ in range(0, num_rows):
+            mh.row_layout.append(int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 1], 'big'))
+            self.read_pos += 1
 
-        for i in range(0, num_rows):
-            layout[i] = self.read_short()
-
-        return MatrixHandle(matrix_id, name, num_rows, num_cols, sparse, num_partitions, layout)
+        return mh
 
     # Writing data
     def start(self, client_id, session_id, command):
@@ -369,6 +391,11 @@ class Message:
 
         return self
 
+    def write_parameter(self):
+        self.check_datatype("PARAMETER")
+
+        return self
+
     # ========================================================================================
 
     def preview_parameter(self, data, pos):
@@ -459,20 +486,46 @@ class Message:
                 elif data_array_type == "LIBRARY_ID":
                     data += str(int.from_bytes(self.message_buffer[i:i+2], 'big')) + " "
                     i += 2
+                elif data_array_type == "MATRIX_ID":
+                    data += str(int.from_bytes(self.message_buffer[i:i+2], 'big')) + " "
+                    i += 2
                 elif data_array_type == "STRING":
                     str_length = int.from_bytes(self.message_buffer[i:i + 4], 'big')
                     i += 4
-                    data += self.message_buffer[i:i + str_length].decode('utf-8')
-                    i += str_length
+                    if str_length > 0:
+                        data += self.message_buffer[i:i + str_length].decode('utf-8')
+                        i += str_length
+                    if j < data_array_length-1:
+                        data += "\n" + space + "                       "
+                elif data_array_type == "MATRIX_INFO":
+                    id = int.from_bytes(self.message_buffer[i:i + 2], 'big')
+                    i += 2
+                    name_length = int.from_bytes(self.message_buffer[i:i + 4], 'big')
+                    i += 4
+                    name = " "
+                    if name_length > 0:
+                        name = self.message_buffer[i:i + name_length].decode('utf-8')
+                        i += name_length
+                    num_rows = int.from_bytes(self.message_buffer[i:i + 8], 'big')
+                    i += 8
+                    num_cols = int.from_bytes(self.message_buffer[i:i + 8], 'big')
+                    i += 8
+                    sparse = int.from_bytes(self.message_buffer[i:i + 1], 'big')
+                    i += 1
+                    layout = int.from_bytes(self.message_buffer[i:i + 1], 'big')
+                    i += 1
+                    num_partitions = int.from_bytes(self.message_buffer[i:i + 1], 'big')
+                    i += 1
+                    mh = MatrixHandle(id, name, num_rows, num_cols, sparse, num_partitions, [])
+                    for _ in range(0, num_rows):
+                        mh.row_layout.append(int.from_bytes(self.message_buffer[i:i + 1], 'big'))
+                        i += 1
+
+                    mh.meta(display_layout=True)
                     if j < data_array_length-1:
                         data += "\n" + space + "                       "
                 elif data_array_type == "PARAMETER":
-                    str_length = int.from_bytes(self.message_buffer[i:i + 4], 'big')
-                    i += 4
-                    data += self.message_buffer[i:i + str_length].decode('utf-8')
-                    i += str_length
-                    if j < data_array_length-1:
-                        data += "\n" + space + "                       "
+                    data += " "
 
             print("{} Data:                 {}".format(space, data))
             if i < self.header_length + temp_body_length:
