@@ -142,9 +142,7 @@ class DriverClient:
         self.receive_message()
 
         self.input_message.print()
-        lh = LibraryHandle(self.input_message.read_short(), name, path)
-
-        return lh
+        return self.input_message.read_library_id()
 
     def run_task(self, lib_id, task_name, in_args):
         self.start_message("RUN_TASK")
@@ -177,8 +175,6 @@ class DriverClient:
                 self.output_message.write_char(value.value)
             elif value.datatype == "STRING":
                 self.output_message.write_string(value.value)
-            elif value.datatype == "LIBRARY_ID":
-                self.output_message.write_library_id(value.value)
             elif value.datatype == "MATRIX_ID":
                 self.output_message.write_matrix_id(value.value)
 
@@ -188,36 +184,42 @@ class DriverClient:
 
         while not self.input_message.eom():
             self.input_message.read_parameter()
-            datatype_count = self.input_message.preview_next_datatype_count()
-            if datatype_count > 1:
-                parameter_name = self.input_message.read_string()
-                out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
+            string_counts = self.input_message.preview_next_datatype_count()
+            parameter_name = self.input_message.read_string()
+            if string_counts > 1:               # parameter name followed by STRING parameter
+                out_args[parameter_name] = Parameter(parameter_name, "STRING",
                                                      self.input_message.read_string())
             else:
-                parameter_name = self.input_message.read_string()
 
                 parameter_datatype = self.input_message.preview_next_datatype()
 
                 if parameter_datatype == "BYTE":
-                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_byte())
+                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
+                                                         self.input_message.read_byte())
                 elif parameter_datatype == "SHORT":
-                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_short())
+                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
+                                                         self.input_message.read_short())
                 elif parameter_datatype == "INT":
-                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_int())
+                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
+                                                         self.input_message.read_int())
                 elif parameter_datatype == "LONG":
-                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_long())
+                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
+                                                         self.input_message.read_long())
                 elif parameter_datatype == "FLOAT":
-                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_float())
+                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
+                                                         self.input_message.read_float())
                 elif parameter_datatype == "DOUBLE":
-                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_double())
+                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
+                                                         self.input_message.read_double())
                 elif parameter_datatype == "CHAR":
-                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_char())
-                elif parameter_datatype == "LIBRARY_ID":
-                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_library_id())
+                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
+                                                         self.input_message.read_char())
                 elif parameter_datatype == "MATRIX_ID":
-                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_matrix_id())
+                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
+                                                         self.input_message.read_matrix_id())
                 elif parameter_datatype == "MATRIX_INFO":
-                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype, self.input_message.read_matrix_info())
+                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
+                                                         self.input_message.read_matrix_info())
 
         return out_args
 

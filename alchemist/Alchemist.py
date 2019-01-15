@@ -98,18 +98,23 @@ class AlchemistSession:
 
     def load_library(self, name, path=""):
         if self.workers_connected:
-            lh = self.driver.load_library(name, path)
-            module = importlib.import_module("alchemist.lib." + name + "." + name)
-            library = getattr(module, name)()
+            lib_id = self.driver.load_library(name, path)
+            print("___ DOKWODK {}".format(lib_id))
+            if lib_id <= 0:
+                print("ERROR: Unable to load library \'{name}\' at {path}, check path.".format(name=name, path=path))
+                return 0
+            else:
+                module = importlib.import_module("alchemist.lib." + name + "." + name)
+                library = getattr(module, name)()
 
-            msg = 'The {module_name} module has the following methods: {methods}'
-            print(msg.format(module_name=name, methods=dir(library)))
+                msg = 'The {module_name} module has the following methods: {methods}'
+                print(msg.format(module_name=name, methods=dir(library)))
 
-            library.set_id(lh.id)
-            library.set_alchemist_session(self)
+                library.set_id(lib_id)
+                library.set_alchemist_session(self)
 
-            self.libraries[lh.id] = library
-            return library
+                self.libraries[lib_id] = library
+                return library
 
     # def run_task(self, lh, name, **kwargs):
     #     print("Alchemist started task " + name + " - please wait ...")

@@ -168,7 +168,7 @@ class Message:
             self.read_next_datatype()
         self.read_pos += 1
         self.current_datatype_count += 1
-        return self.message_buffer[self.read_pos-1]
+        return int.from_bytes(self.message_buffer[self.read_pos-1:self.read_pos], 'big')
 
     def read_char(self):
         if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
@@ -226,7 +226,11 @@ class Message:
             self.read_next_datatype()
 
     def read_library_id(self):
-        return self.read_short()
+        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
+            self.read_next_datatype()
+        self.current_datatype_count += 1
+        self.read_pos += 1
+        return int.from_bytes(self.message_buffer[self.read_pos-1:self.read_pos], 'big')
 
     def read_matrix_id(self):
         return self.read_short()
@@ -381,13 +385,14 @@ class Message:
         return self
 
     def put_library_id(self, value, pos):
-        self.message_buffer[pos:pos+2] = value.to_bytes(2, 'big')
+        print("DOKWODK {}".format(value))
+        self.message_buffer[pos] = value.to_bytes(1, 'big')[0]
 
     def write_library_id(self, value):
         self.check_datatype("LIBRARY_ID")
         self.put_library_id(value, self.write_pos)
 
-        self.write_pos += 2
+        self.write_pos += 1
 
         return self
 
@@ -461,6 +466,8 @@ class Message:
             data = ""
             i += 5
 
+            print("{} Datat ".format(data_array_type))
+
             for j in range(0, data_array_length):
                 if data_array_type == "BYTE":
                     data += str(self.message_buffer[i]) + " "
@@ -484,7 +491,7 @@ class Message:
                     data += str(struct.unpack('>d', self.message_buffer[i:i+8])[0]) + " "
                     i += 8
                 elif data_array_type == "LIBRARY_ID":
-                    data += str(int.from_bytes(self.message_buffer[i:i+2], 'big')) + " "
+                    data += str(int.from_bytes(self.message_buffer[i:i+1], 'big')) + " "
                     i += 2
                 elif data_array_type == "MATRIX_ID":
                     data += str(int.from_bytes(self.message_buffer[i:i+2], 'big')) + " "
