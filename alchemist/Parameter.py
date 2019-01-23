@@ -15,7 +15,7 @@ class Parameter:
                  "DOUBLE": 16,
                  "CHAR": 1,
                  "STRING": 46,
-                 "MATRIX_INFO": 52}
+                 "MATRIX_HANDLE": 52}
 
     def __init__(self, name, datatype, value=[]):
         self.name = name

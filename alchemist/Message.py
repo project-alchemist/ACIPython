@@ -120,7 +120,7 @@ class Message:
 
         return self.message_buffer[0:self.header_length + self.body_length]
 
-    # Reading data
+    # Reading header
     def read_client_id(self):
         return int.from_bytes(self.message_buffer[0:2], 'big')
 
@@ -141,6 +141,7 @@ class Message:
         self.read_pos = self.header_length
         self.write_pos = self.header_length
 
+    # Reading data
     def read_next_datatype(self):
         self.current_datatype = self.message_buffer[self.read_pos]
         self.current_datatype_count = 0
@@ -385,7 +386,6 @@ class Message:
         return self
 
     def put_library_id(self, value, pos):
-        print("DOKWODK {}".format(value))
         self.message_buffer[pos] = value.to_bytes(1, 'big')[0]
 
     def write_library_id(self, value):
@@ -400,11 +400,6 @@ class Message:
         self.check_datatype("PARAMETER")
 
         return self
-
-    # ========================================================================================
-
-    def preview_parameter(self, data, pos):
-        print("P")
 
     # ========================================================================================
 
@@ -491,8 +486,8 @@ class Message:
                     data += str(struct.unpack('>d', self.message_buffer[i:i+8])[0]) + " "
                     i += 8
                 elif data_array_type == "LIBRARY_ID":
-                    data += str(int.from_bytes(self.message_buffer[i:i+1], 'big')) + " "
-                    i += 2
+                    data += str(self.message_buffer[i]) + " "
+                    i += 1
                 elif data_array_type == "MATRIX_ID":
                     data += str(int.from_bytes(self.message_buffer[i:i+2], 'big')) + " "
                     i += 2

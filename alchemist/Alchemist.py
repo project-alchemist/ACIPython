@@ -41,8 +41,6 @@ class AlchemistSession:
 
         mh = self.get_matrix_handle(data)
 
-        print(mh.row_layout)
-
         self.workers.send_blocks(mh, data)
         #     self.driver.send_block(mh, block)
 
@@ -64,7 +62,7 @@ class AlchemistSession:
 
         return mh
 
-    def get_array(self, mh, rows=[-1], cols=[-1]):
+    def fetch_array(self, mh, rows=[-1], cols=[-1]):
 
         if rows[0] == -1:
             num_rows = mh.num_rows
@@ -99,7 +97,6 @@ class AlchemistSession:
     def load_library(self, name, path=""):
         if self.workers_connected:
             lib_id = self.driver.load_library(name, path)
-            print("___ DOKWODK {}".format(lib_id))
             if lib_id <= 0:
                 print("ERROR: Unable to load library \'{name}\' at {path}, check path.".format(name=name, path=path))
                 return 0
@@ -115,15 +112,6 @@ class AlchemistSession:
 
                 self.libraries[lib_id] = library
                 return library
-
-    # def run_task(self, lh, name, **kwargs):
-    #     print("Alchemist started task " + name + " - please wait ...")
-    #     start = time.time()
-    #     in_args, out_args = self.libraries[lh].run_task(name, **kwargs)
-    #     out = self.driver.run_task(lh, name, in_args, out_args)
-    #     end = time.time()
-    #     print("Elapsed time for truncated SVD is " + str(end - start))
-    #     return out
 
     def run_task(self, lib_id, name, in_args):
         print("Alchemist started task '" + name + "' ... ", end="", flush=True)
@@ -223,4 +211,6 @@ class AlchemistSession:
     def close(self):
         self.driver.close()
         self.workers.close()
+
+
 

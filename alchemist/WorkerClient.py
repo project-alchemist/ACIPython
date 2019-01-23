@@ -120,7 +120,7 @@ class WorkerClient:
     def send_message(self):
         try:
             self.output_message.finish()
-            # self.output_message.print()
+            self.output_message.print()
             self.sock.sendall(self.output_message.get())
             self.output_message.reset()
             return True

@@ -134,7 +134,6 @@ class DriverClient:
         print("Alchemist returned: '" + self.input_message.read_string() + "'")
 
     def load_library(self, name, path=""):
-
         self.start_message("LOAD_LIBRARY")
         self.output_message.write_string(name)
         self.output_message.write_string(path)
@@ -218,7 +217,7 @@ class DriverClient:
                     out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
                                                          self.input_message.read_matrix_id())
                 elif parameter_datatype == "MATRIX_INFO":
-                    out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
+                    out_args[parameter_name] = Parameter(parameter_name, "MATRIX_HANDLE",
                                                          self.input_message.read_matrix_info())
 
         return out_args

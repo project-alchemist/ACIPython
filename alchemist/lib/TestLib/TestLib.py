@@ -56,10 +56,11 @@ class TestLib:
 
         return S, U, V
 
-    def greet(self, rank):
+    def greet(self, rank, bb):
 
         in_args = {}
         in_args["rank"] = Parameter("rank", "INT", rank)
+        in_args["bb"] = Parameter("bb", "DOUBLE", bb)
 
         self.als.display_parameters(in_args, "List of input parameters:")
 
