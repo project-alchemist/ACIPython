@@ -4,7 +4,7 @@ import numpy as np
 from .Message import Message
 from .Parameter import Parameter
 from .LibraryHandle import LibraryHandle
-from .MatrixHandle import MatrixHandle
+from .ArrayHandle import ArrayHandle
 from .WorkerClient import WorkerInfo
 
 
@@ -45,20 +45,25 @@ class DriverClient:
 
         # Connect the socket to the port where Alchemist is listening
         server_address = (self.address, self.port)
-        print('Connecting to Alchemist at {0}:{1} ...'.format(*server_address))
+        print('Connecting to Alchemist at {0}:{1} ... '.format(*server_address), end="", flush=True)
         try:
             self.sock.connect(server_address)
         except socket.gaierror:
+            print(" ")
             print("ERROR: Address-related error connecting to Alchemist")
             return False
         except ConnectionRefusedError:
+            print(" ")
             print("ERROR: Alchemist appears to be offline")
             return False
 
         if self.handshake():
-            print("Connected to Alchemist!")
+            print("done!")
+            print(" ")
+            print("Alchemist is ready")
             return True
         else:
+            print(" ")
             print("Unable to connect to Alchemist")
             return False
 
@@ -105,6 +110,8 @@ class DriverClient:
         self.output_message.write_byte(4)
         self.output_message.write_short(1234)
         self.output_message.write_string("ABCD")
+        test_array = 1.11*np.arange(3, 15).reshape((4, 3))
+        self.output_message.write_array_block(test_array, [0, 4, 1], [0, 3, 1])
         self.send_message()
         self.receive_message()
         if self.input_message.read_short() == 4321:
@@ -139,8 +146,6 @@ class DriverClient:
         self.output_message.write_string(path)
         self.send_message()
         self.receive_message()
-
-        self.input_message.print()
         return self.input_message.read_library_id()
 
     def run_task(self, lib_id, task_name, in_args):
@@ -174,8 +179,8 @@ class DriverClient:
                 self.output_message.write_char(value.value)
             elif value.datatype == "STRING":
                 self.output_message.write_string(value.value)
-            elif value.datatype == "MATRIX_ID":
-                self.output_message.write_matrix_id(value.value)
+            elif value.datatype == "ARRAY_ID":
+                self.output_message.write_array_id(value.value)
 
     def deserialize_parameters(self):
 
@@ -213,17 +218,17 @@ class DriverClient:
                 elif parameter_datatype == "CHAR":
                     out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
                                                          self.input_message.read_char())
-                elif parameter_datatype == "MATRIX_ID":
+                elif parameter_datatype == "ARRAY_ID":
                     out_args[parameter_name] = Parameter(parameter_name, parameter_datatype,
-                                                         self.input_message.read_matrix_id())
-                elif parameter_datatype == "MATRIX_INFO":
-                    out_args[parameter_name] = Parameter(parameter_name, "MATRIX_HANDLE",
-                                                         self.input_message.read_matrix_info())
+                                                         self.input_message.read_array_id())
+                elif parameter_datatype == "ARRAY_INFO":
+                    out_args[parameter_name] = Parameter(parameter_name, "ARRAY_HANDLE",
+                                                         self.input_message.read_array_info())
 
         return out_args
 
-    def send_matrix_info(self, name="", num_rows=0, num_cols=0, sparse=False, layout=0):
-        self.start_message("SEND_MATRIX_INFO")
+    def send_array_info(self, name="", num_rows=0, num_cols=0, sparse=False, layout=0):
+        self.start_message("SEND_ARRAY_INFO")
         self.output_message.write_string(name)
         self.output_message.write_long(num_rows)            # Number of rows
         self.output_message.write_long(num_cols)            # Number of columns
@@ -234,8 +239,7 @@ class DriverClient:
         self.output_message.write_byte(0)                   # Layout: by rows (default)
         self.send_message()
         self.receive_message()
-        self.input_message.print()
-        return self.input_message.read_matrix_info()
+        return self.input_message.read_array_info()
 
     def extract_layout(self, num_rows):
         layout = np.zeros(num_rows, dtype=np.int16)
@@ -294,8 +298,8 @@ class DriverClient:
 
         return deallocated_workers
 
-    def get_matrix_info(self):
-        self.start_message("REQUEST_MATRIX_INFO")
+    def get_array_info(self):
+        self.start_message("REQUEST_ARRAY_INFO")
         return self.send_message
 
     def list_all_workers(self, preamble):

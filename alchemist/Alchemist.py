@@ -1,7 +1,7 @@
 from .DriverClient import DriverClient
 from .WorkerClient import WorkerClients
-import h5py
 import time
+import h5py
 import os
 import importlib
 import numpy as np
@@ -19,32 +19,72 @@ class AlchemistSession:
     workers_connected = False
 
     def __init__(self):
-        print("Starting Alchemist session")
+        print("Starting Alchemist session ... ", end="", flush=True)
         self.driver = DriverClient()
         self.workers = WorkerClients()
         self.workers_connected = False
-        print("Alchemist session ready")
+        print("ready")
 
     def __del__(self):
         print("Ending Alchemist session")
         self.close()
 
+    def namestr(self, obj, namespace):
+        return [name for name in namespace if namespace[name] is obj]
+
     def read_from_hdf5(self, filename):
         print("Loaded " + filename)
         return h5py.File(filename, 'r')
 
-    def send_array(self, data):
+    def send_array(self, array, print_times=False):
         max_block_rows = 100
         max_block_cols = 20000
 
-        (num_rows, num_cols) = data.shape
+        (num_rows, num_cols) = array.shape
 
-        mh = self.get_matrix_handle(data)
+        print("Sending array info to Alchemist ... ", end="", flush=True)
+        start = time.time()
+        ah = self.get_array_handle(array)
+        end = time.time()
+        print("done ({0:.4e}s)".format(end - start))
 
-        self.workers.send_blocks(mh, data)
+        print("Sending array data to Alchemist ... ", end="", flush=True)
+        start = time.time()
+        times = self.workers.send_array_blocks(ah, array)
+        end = time.time()
+        print("done ({0:.4e}s)".format(end - start))
+        if print_times:
+            self.print_times(times, name=ah.name)
         #     self.driver.send_block(mh, block)
 
-        return mh
+        return ah
+
+    def fetch_array(self, ah, print_times=False):
+
+        array = np.zeros((ah.num_rows, ah.num_cols))
+
+        print("Fetching data for array {0} from Alchemist ... ".format(ah.name), end="", flush=True)
+        start = time.time()
+        times = self.workers.get_array_blocks(ah, array)
+        end = time.time()
+        print("done ({0:.4e}s)".format(end - start))
+        if print_times:
+            self.print_times(times, name=ah.name)
+        return array
+
+    def print_times(self, times, name=" ", spacing="  "):
+        print("")
+        if name is "":
+            print("Data transfer times breakdown")
+        else:
+            print("Data transfer times breakdown for array {}".format(name))
+        print("{}---------------------------------------------------------------------------------------------------------------".format(spacing))
+        print("{}  Worker  |   Serialization time   |       Send time        |      Receive time      |  Deserialization time  ".format(spacing))
+        print("{}---------------------------------------------------------------------------------------------------------------".format(spacing))
+        for i in range(self.workers.num_workers):
+            print("{0}    {1:3d}   |       {2:.4e}       |       {3:.4e}       |       {4:.4e}       |       {5:.4e}       ".format(spacing, i+1, times[0, i], times[1, i], times[2, i], times[3, i]))
+        print("{}---------------------------------------------------------------------------------------------------------------".format(spacing))
+        print("")
 
     def send_hdf5(self, f):
 
@@ -53,7 +93,7 @@ class AlchemistSession:
         num_rows = sh[0]
         num_cols = sh[1]
 
-        mh = self.get_matrix_handle(f)
+        mh = self.get_array_handle(f)
 
         chunk = 1000
 
@@ -62,37 +102,15 @@ class AlchemistSession:
 
         return mh
 
-    def fetch_array(self, mh, rows=[-1], cols=[-1]):
-
-        if rows[0] == -1:
-            num_rows = mh.num_rows
-            rows = range(0, num_rows)
-        else:
-            num_rows = len(rows)
-
-        if cols[0] == -1:
-            num_cols = mh.num_cols
-            cols = range(0, mh.num_cols)
-        else:
-            num_cols = len(cols)
-
-        data = np.zeros((num_rows, num_cols))
-
-        print("Fetching " + str(num_rows) + "x" + str(num_cols) + " array from Alchemist")
-
-        self.workers.get_blocks(mh, data, rows, cols)
-
-        return data
-
-    def get_matrix_handle(self, data=[], name="", sparse=0, layout=0):
-        print("Sending matrix info to Alchemist ... ", end="", flush=True)
-        start = time.time()
+    def get_array_handle(self, data=[], name="", sparse=0, layout=0):
+        # print("Sending matrix info to Alchemist ... ", end="", flush=True)
+        # start = time.time()
         (num_rows, num_cols) = data.shape
 
-        mh = self.driver.send_matrix_info(name, num_rows, num_cols, sparse, layout)
-        end = time.time()
-        print("done (" + str(end - start) + ")")
-        return mh
+        ah = self.driver.send_array_info(name, num_rows, num_cols, sparse, layout)
+        # end = time.time()
+        # print("done ({0:.4e})".format(end - start))
+        return ah
 
     def load_library(self, name, path=""):
         if self.workers_connected:
@@ -104,13 +122,15 @@ class AlchemistSession:
                 module = importlib.import_module("alchemist.lib." + name + "." + name)
                 library = getattr(module, name)()
 
-                msg = 'The {module_name} module has the following methods: {methods}'
-                print(msg.format(module_name=name, methods=dir(library)))
+                # msg = 'The {module_name} module has the following methods: {methods}'
+                # print(msg.format(module_name=name, methods=dir(library)))
 
                 library.set_id(lib_id)
                 library.set_alchemist_session(self)
 
                 self.libraries[lib_id] = library
+
+                print("Library \'{name}\' at {path} successfully loaded.".format(name=name, path=path))
                 return library
 
     def run_task(self, lib_id, name, in_args):
@@ -118,10 +138,10 @@ class AlchemistSession:
         start = time.time()
         out_args = self.driver.run_task(lib_id, name, in_args)
         end = time.time()
-        print("done (" + str(end - start) + ")")
+        print("done ({0:.4e}s)".format(end - start))
         return out_args
 
-    def display_parameters(self, parameters, preamble="", spacing=""):
+    def display_parameters(self, parameters, preamble="", spacing="    "):
 
         if len(preamble) > 0:
             print(preamble)

@@ -16,6 +16,8 @@ import argparse
 import scipy.io as sio
 
 
+
+
 # Code adapted from Ryan Cooper (https://github.com/Coopss/EMNIST)
 def load_emnist(mat_file_path, width=28, height=28, max_=None, verbose=False):
     ''' Load data in from .mat file as specified by the paper.

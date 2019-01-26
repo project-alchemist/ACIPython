@@ -1,13 +1,16 @@
 import numpy as np
+import pyarrow as pa
+import time
+import math
 from .Parameter import Parameter
-from .MatrixHandle import MatrixHandle
+from .ArrayHandle import ArrayHandle
 import struct
 
 
 class Message:
 
     header_length = 9
-    max_body_length = 10000000
+    max_body_length = 100000000
 
     commands = {"WAIT": 0,
                 # Connection
@@ -29,11 +32,11 @@ class Message:
                 "LIST_AVAILABLE_LIBRARIES": 21,
                 "LOAD_LIBRARY": 22,
                 "UNLOAD_LIBRARY": 23,
-                # Matrices
-                "SEND_MATRIX_INFO": 31,
-                "SEND_MATRIX_LAYOUT": 32,
-                "SEND_MATRIX_BLOCKS": 33,
-                "REQUEST_MATRIX_BLOCKS": 34,
+                # Arrays
+                "SEND_ARRAY_INFO": 31,
+                "SEND_ARRAY_LAYOUT": 32,
+                "SEND_ARRAY_BLOCKS": 33,
+                "REQUEST_ARRAY_BLOCKS": 34,
                 # Tasks
                 "RUN_TASK": 41,
                 # Shutting down
@@ -51,9 +54,9 @@ class Message:
                  "COMMAND_CODE": 48,
                  "PARAMETER": 49,
                  "LIBRARY_ID": 50,
-                 "MATRIX_ID": 51,
-                 "MATRIX_INFO": 52,
-                 "DISTMATRIX": 53}
+                 "ARRAY_ID": 51,
+                 "ARRAY_INFO": 52,
+                 "ARRAY_BLOCK": 53}
 
     message_buffer = bytearray(header_length)
 
@@ -233,14 +236,14 @@ class Message:
         self.read_pos += 1
         return int.from_bytes(self.message_buffer[self.read_pos-1:self.read_pos], 'big')
 
-    def read_matrix_id(self):
+    def read_array_id(self):
         return self.read_short()
 
-    def read_matrix_info(self):
+    def read_array_info(self):
         if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
             self.read_next_datatype()
         self.current_datatype_count += 1
-        matrix_id = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 2], 'big')
+        array_id = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 2], 'big')
         self.read_pos += 2
         name_length = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 4], 'big')
         self.read_pos += 4
@@ -258,12 +261,41 @@ class Message:
         self.read_pos += 1
         num_partitions = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 1], 'big')
         self.read_pos += 1
-        mh = MatrixHandle(matrix_id, name, num_rows, num_cols, sparse, num_partitions, [])
+        ah = ArrayHandle(array_id, name, num_rows, num_cols, sparse, num_partitions, [])
         for _ in range(0, num_rows):
-            mh.row_layout.append(int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 1], 'big'))
+            ah.row_layout.append(int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 1], 'big'))
             self.read_pos += 1
 
-        return mh
+        return ah
+
+    def read_array_block(self, array):
+        rows = [0, 0, 0]
+        cols = [0, 0, 0]
+
+        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
+            self.read_next_datatype()
+        self.current_datatype_count += 1
+        ndims = self.message_buffer[self.read_pos]
+        self.read_pos += 1
+        size = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 8], 'big')
+        self.read_pos += 8
+        for i in range(3):
+            rows[i] = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 8], 'big')
+            self.read_pos += 8
+            cols[i] = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 8], 'big')
+            self.read_pos += 8
+
+        row_range = np.array(np.arange(rows[0], rows[1], rows[2]), dtype=np.intp)
+        col_range = np.array(np.arange(cols[0], cols[1], cols[2]), dtype=np.intp)
+
+        num_rows = len(row_range)
+        num_cols = len(col_range)
+
+        array[np.ix_(row_range, col_range)] = np.frombuffer(self.message_buffer[self.read_pos:self.read_pos + 8*size], dtype=np.float64).reshape(num_rows, num_cols)
+        self.read_pos += 8 * size
+
+        return array
+
 
     # Writing data
     def start(self, client_id, session_id, command):
@@ -374,14 +406,42 @@ class Message:
 
         return self
 
-    def put_matrix_id(self, value, pos):
+    def put_array_id(self, value, pos):
         self.message_buffer[pos:pos+2] = value.to_bytes(2, 'big')
 
-    def write_matrix_id(self, value):
-        self.check_datatype("MATRIX_ID")
-        self.put_matrix_id(value, self.write_pos)
+    def write_array_id(self, value):
+        self.check_datatype("ARRAY_ID")
+        self.put_array_id(value, self.write_pos)
 
         self.write_pos += 2
+
+        return self
+
+    def write_array_block(self, block, rows, cols):
+
+        self.check_datatype("ARRAY_BLOCK")
+        ndims = 2
+        self.message_buffer[self.write_pos] = ndims.to_bytes(1, 'big')[0]
+        self.write_pos = self.write_pos + 1
+        self.message_buffer[self.write_pos:self.write_pos + 8] = block.size.to_bytes(8, 'big')
+        self.write_pos = self.write_pos + 8
+        for i in range(3):
+            self.message_buffer[self.write_pos:self.write_pos + 8] = rows[i].to_bytes(8, 'big')
+            self.write_pos = self.write_pos + 8
+            self.message_buffer[self.write_pos:self.write_pos + 8] = cols[i].to_bytes(8, 'big')
+            self.write_pos = self.write_pos + 8
+        if block.size > 0:
+            # start = time.time()
+            # self.message_buffer[self.write_pos:self.write_pos + 8*block.size] = block.tobytes('C')
+            # # self.message_buffer[self.write_pos:self.write_pos + block.size] = block.view(dtype=np.uint8)
+            # send_time = time.time() - start
+            # print("Send time 3 {0}".format(send_time))
+            # start = time.time()
+            # self.message_buffer[self.write_pos:self.write_pos + 8*block.size] = pa.serialize(block).to_buffer()
+            # send_time = time.time() - start
+            # print("Send time 2 {0}".format(send_time))
+            self.message_buffer[self.write_pos:self.write_pos + 8*block.size] = block.tobytes('C')
+            self.write_pos += 8 * block.size
 
         return self
 
@@ -461,8 +521,6 @@ class Message:
             data = ""
             i += 5
 
-            print("{} Datat ".format(data_array_type))
-
             for j in range(0, data_array_length):
                 if data_array_type == "BYTE":
                     data += str(self.message_buffer[i]) + " "
@@ -488,7 +546,7 @@ class Message:
                 elif data_array_type == "LIBRARY_ID":
                     data += str(self.message_buffer[i]) + " "
                     i += 1
-                elif data_array_type == "MATRIX_ID":
+                elif data_array_type == "ARRAY_ID":
                     data += str(int.from_bytes(self.message_buffer[i:i+2], 'big')) + " "
                     i += 2
                 elif data_array_type == "STRING":
@@ -499,7 +557,7 @@ class Message:
                         i += str_length
                     if j < data_array_length-1:
                         data += "\n" + space + "                       "
-                elif data_array_type == "MATRIX_INFO":
+                elif data_array_type == "ARRAY_INFO":
                     id = int.from_bytes(self.message_buffer[i:i + 2], 'big')
                     i += 2
                     name_length = int.from_bytes(self.message_buffer[i:i + 4], 'big')
@@ -518,14 +576,16 @@ class Message:
                     i += 1
                     num_partitions = int.from_bytes(self.message_buffer[i:i + 1], 'big')
                     i += 1
-                    mh = MatrixHandle(id, name, num_rows, num_cols, sparse, num_partitions, [])
+                    ah = ArrayHandle(id, name, num_rows, num_cols, sparse, num_partitions, [])
                     for _ in range(0, num_rows):
-                        mh.row_layout.append(int.from_bytes(self.message_buffer[i:i + 1], 'big'))
+                        ah.row_layout.append(int.from_bytes(self.message_buffer[i:i + 1], 'big'))
                         i += 1
 
-                    mh.meta(display_layout=True)
                     if j < data_array_length-1:
                         data += "\n" + space + "                       "
+                elif data_array_type == "ARRAY_BLOCK":
+                    ndims = int.from_bytes(self.message_buffer[i:i + 1])
+                    i += 1
                 elif data_array_type == "PARAMETER":
                     data += " "
 

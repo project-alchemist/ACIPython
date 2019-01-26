@@ -1,5 +1,7 @@
 import socket
 from .Message import Message
+import numpy as np
+import time
 
 
 class WorkerInfo:
@@ -17,6 +19,7 @@ class WorkerClients:
 
     workers = []
     num_workers = 0
+    times = []
 
     def __init__(self):
         self.num_workers = 0
@@ -26,6 +29,7 @@ class WorkerClients:
             worker = WorkerClient(new_workers[i].id, new_workers[i].hostname, new_workers[i].address, new_workers[i].port)
             self.workers.append(worker)
         self.num_workers = len(new_workers)
+        self.times = np.zeros((4, self.num_workers))
         return self.num_workers
 
     def connect(self):
@@ -39,16 +43,22 @@ class WorkerClients:
             print("  Worker-{} on {} at {}:{}".format(self.workers[i].id, self.workers[i].hostname, self.workers[i].address, self.workers[i].port))
 
     def handshake(self):
-        for i in range(0, self.num_workers):
+        for i in range(self.num_workers):
             self.workers[i].handshake()
 
-    def send_blocks(self, mh, data, row_start=0):
-        for i in range(0, self.num_workers):
-            self.workers[i].send_blocks(mh, data, row_start)
+    def send_array_blocks(self, ah, array):
+        for i in range(self.num_workers):
+            rows = [self.workers[i].id-1, 0, ah.num_partitions]
+            cols = [0, 0, 1]
+            self.times[:, i] = self.workers[i].send_array_block(ah, array, rows, cols)
+        return self.times
 
-    def get_blocks(self, mh, data, rows, cols):
-        for i in range(0, self.num_workers):
-            self.workers[i].get_blocks(mh, data, rows, cols)
+    def get_array_blocks(self, ah, array):
+        for i in range(self.num_workers):
+            rows = [self.workers[i].id-1, 0, ah.num_partitions]
+            cols = [0, 0, 1]
+            self.times[:, i] = self.workers[i].get_array_block(ah, array, rows, cols)
+        return self.times
 
     def send_test_string(self):
         for i in range(0, self.num_workers):
@@ -120,7 +130,7 @@ class WorkerClient:
     def send_message(self):
         try:
             self.output_message.finish()
-            self.output_message.print()
+            # self.output_message.print()
             self.sock.sendall(self.output_message.get())
             self.output_message.reset()
             return True
@@ -157,6 +167,8 @@ class WorkerClient:
         self.output_message.write_byte(4)
         self.output_message.write_short(1234)
         self.output_message.write_string("ABCD")
+        test_array = 1.11*np.arange(3, 15).reshape((4, 3))
+        self.output_message.write_array_block(test_array, [0, 4, 1], [0, 3, 1])
         self.send_message()
         self.receive_message()
         if self.input_message.read_short() == 4321:
@@ -166,56 +178,69 @@ class WorkerClient:
                 return True
         return False
 
-    def send_blocks(self, mh, data, row_start=0):
+    def send_array_block(self, ah, array, rows=[0, 0, 0], cols=[0, 0, 0]):
 
-        sh = data.shape
+        if rows[1] == 0:
+            rows[1] = array.shape[0]
+        if rows[2] == 0:
+            rows[2] = 1
+        row_range = np.array(np.arange(rows[0], rows[1], rows[2]), dtype=np.intp)
 
-        self.output_message.start(self.client_id, self.session_id, "SEND_MATRIX_BLOCKS")
-        self.output_message.write_short(mh.id)
-        for i in range(0, sh[0]):
-            if mh.row_layout[row_start+i] == self.id:
-                self.output_message.write_long(row_start+i)
-                self.output_message.write_long(row_start+i)
-                self.output_message.write_long(0)
-                self.output_message.write_long(sh[1]-1)
-                for j in range(0, sh[1]):
-                    self.output_message.write_double(data[i, j])
+        if cols[1] == 0:
+            cols[1] = array.shape[1]
+        if cols[2] == 0:
+            cols[2] = 1
+        col_range = np.array(np.arange(cols[0], cols[1], cols[2]), dtype=np.intp)
 
+        times = []
+
+        self.output_message.start(self.client_id, self.session_id, "SEND_ARRAY_BLOCKS")
+        self.output_message.write_array_id(ah.id)
+        start = time.time()
+        self.output_message.write_array_block(array[np.ix_(row_range, col_range)], rows, cols)
+        times.append(time.time() - start)
+
+        start = time.time()
         self.send_message()
+        times.append(time.time() - start)
+        start = time.time()
         self.receive_message()
+        times.append(time.time() - start)
+        start = time.time()
+        self.input_message.read_array_id()
+        times.append(time.time() - start)
+        return times
 
-        self.input_message.read_short()
-        print("Alchemist worker " + str(self.id) + " received " + str(self.input_message.read_int()) + " blocks")
+    def get_array_block(self, ah, array, rows=[0, 0, 0], cols=[0, 0, 0]):
 
-    def get_blocks(self, mh, data, rows, cols):
-        self.output_message.start(self.client_id, self.session_id, "REQUEST_MATRIX_BLOCKS")
-        self.output_message.write_short(mh.id)
-        for i in rows:
-            if mh.row_layout[i] == self.id:
-                self.output_message.write_long(i)
-                self.output_message.write_long(i)
-                self.output_message.write_long(cols[0])
-                self.output_message.write_long(cols[-1])
+        if rows[1] == 0:
+            rows[1] = array.shape[0]
+        if rows[2] == 0:
+            rows[2] = 1
 
+        if cols[1] == 0:
+            cols[1] = array.shape[1]
+        if cols[2] == 0:
+            cols[2] = 1
+
+        times = []
+
+        start = time.time()
+        self.output_message.start(self.client_id, self.session_id, "REQUEST_ARRAY_BLOCKS")
+        self.output_message.write_array_id(ah.id)
+        self.output_message.write_array_block(np.empty([0, 0]), rows, cols)
+        times.append(time.time() - start)
+        start = time.time()
         self.send_message()
+        times.append(time.time() - start)
+        start = time.time()
         self.receive_message()
-
-        self.input_message.read_short()
-
-        while True:
-            row_start = self.input_message.read_long()
-            row_end   = self.input_message.read_long()
-            col_start = self.input_message.read_long()
-            col_end   = self.input_message.read_long()
-
-            for i in range(row_start, row_end+1):
-                for j in range(col_start, col_end+1):
-                    data[rows.index(i), cols.index(j)] = self.input_message.read_double()
-
-            if self.input_message.eom():
-                break
-
-        return data
+        times.append(time.time() - start)
+        start = time.time()
+        self.input_message.read_array_id()
+        self.input_message.read_array_block(array)
+        times.append(time.time() - start)
+        return times
 
     def send_test_string(self):
         test_message = "This is a test message from client {}".format(self.client_id)

@@ -16,8 +16,6 @@ class TestLib:
         self.id = id
 
     def set_alchemist_session(self, als):
-        print("Setting Alchemist session")
-
         self.als = als
 
     def get_output_parameters(self):
@@ -32,7 +30,7 @@ class TestLib:
 
             for key, value in kwargs.items():
                 if key == "A":
-                    in_args[key] = Parameter(key, "MATRIX_ID", value)
+                    in_args[key] = Parameter(key, "ARRAY_ID", value)
                 elif key == "rank":
                     in_args[key] = Parameter(key, "INT", value)
 
@@ -41,7 +39,7 @@ class TestLib:
     def truncated_svd(self, A, rank):
 
         in_args = {}
-        in_args["A"] = Parameter("A", "MATRIX_ID", A.id)
+        in_args["A"] = Parameter("A", "ARRAY_ID", A.id)
         in_args["rank"] = Parameter("rank", "INT", rank)
 
         self.als.display_parameters(in_args, "List of input parameters:")

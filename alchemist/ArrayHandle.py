@@ -1,8 +1,4 @@
-import numpy as np
-import random as rnd
-
-
-class MatrixHandle:
+class ArrayHandle:
 
     id = 0
 
