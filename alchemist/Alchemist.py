@@ -1,5 +1,6 @@
-from .DriverClient import DriverClient
-from .WorkerClient import WorkerClients
+from .Client import DriverClient, WorkerClients
+from .MatrixHandle import MatrixHandle
+from .Parameter import Parameter
 import time
 import h5py
 import os
@@ -36,21 +37,21 @@ class AlchemistSession:
         print("Loaded " + filename)
         return h5py.File(filename, 'r')
 
-    def send_array(self, array, print_times=False):
+    def send_matrix(self, matrix, print_times=False, layout="MC_MR"):
         max_block_rows = 100
         max_block_cols = 20000
 
-        (num_rows, num_cols) = array.shape
+        (num_rows, num_cols) = matrix.shape
 
         print("Sending array info to Alchemist ... ", end="", flush=True)
         start = time.time()
-        ah = self.get_array_handle(array)
+        ah = self.get_matrix_handle(matrix, layout=layout)
         end = time.time()
         print("done ({0:.4e}s)".format(end - start))
 
         print("Sending array data to Alchemist ... ", end="", flush=True)
         start = time.time()
-        times = self.workers.send_array_blocks(ah, array)
+        times = self.workers.send_matrix_blocks(ah, matrix)
         end = time.time()
         print("done ({0:.4e}s)".format(end - start))
         if print_times:
@@ -59,18 +60,18 @@ class AlchemistSession:
 
         return ah
 
-    def fetch_array(self, ah, print_times=False):
+    def fetch_matrix(self, mh, print_times=False):
 
-        array = np.zeros((ah.num_rows, ah.num_cols))
+        matrix = np.zeros((mh.num_rows, mh.num_cols))
 
-        print("Fetching data for array {0} from Alchemist ... ".format(ah.name), end="", flush=True)
+        print("Fetching data for array {0} from Alchemist ... ".format(mh.name), end="", flush=True)
         start = time.time()
-        times = self.workers.get_array_blocks(ah, array)
+        matrix, times = self.workers.get_matrix_blocks(mh, matrix)
         end = time.time()
         print("done ({0:.4e}s)".format(end - start))
         if print_times:
-            self.print_times(times, name=ah.name)
-        return array
+            self.print_times(times, name=mh.name)
+        return matrix
 
     def print_times(self, times, name=" ", spacing="  "):
         print("")
@@ -102,12 +103,12 @@ class AlchemistSession:
 
         return mh
 
-    def get_array_handle(self, data=[], name="", sparse=0, layout=0):
+    def get_matrix_handle(self, data=[], name="", sparse=0, layout="MC_MR"):
         # print("Sending matrix info to Alchemist ... ", end="", flush=True)
         # start = time.time()
         (num_rows, num_cols) = data.shape
 
-        ah = self.driver.send_array_info(name, num_rows, num_cols, sparse, layout)
+        ah = self.driver.send_matrix_info(name, num_rows, num_cols, sparse, MatrixHandle.layouts[layout])
         # end = time.time()
         # print("done ({0:.4e})".format(end - start))
         return ah
@@ -145,25 +146,20 @@ class AlchemistSession:
 
         if len(preamble) > 0:
             print(preamble)
-        for key, value in parameters.items():
-            print(spacing + key + " = " + str(value.value) + " (" + value.datatype + ")")
+        for key, p in parameters.items():
+            print(spacing + p.to_string())
+        # for key, value in parameters.items():
+        #     dt_name = ""
+        #     for name, code in Parameter.datatypes.items():
+        #         if code == value.datatype:
+        #             dt_name = name
+        #     print(spacing + key + " = " + str(value.value) + " (" + dt_name + ")")
 
     def connect_to_alchemist(self, address, port):
         self.driver.address = address
         self.driver.port = port
 
         self.driver.connect()
-
-    def request_workers(self, num_requested_workers):
-        # if num_requested_workers < 2:
-        #     print("You can ask for more than that!")
-        # elif num_requested_workers > self.driver.get_max_alchemist_workers():
-        #     print("You demand too much!")
-        #     print("There are just " + str(self.driver.get_max_alchemist_workers()) + " Alchemist workers in total")
-        # else:
-        self.workers.add_workers(self.driver.request_workers(num_requested_workers))
-        self.workers.print()
-        self.workers_connected = self.workers.connect()
 
     def send_test_string(self):
         self.driver.send_test_string()
@@ -194,36 +190,79 @@ class AlchemistSession:
     def load_from_hdf5(self, file_name, dataset_name):
         return self.driver.load_from_hdf5(file_name, dataset_name)
 
-    def yield_workers(self, yielded_workers=[]):
-        deallocated_workers = sorted(self.driver.yield_workers(yielded_workers))
-
-        if len(deallocated_workers) == 0:
-            print("No workers were deallocated\n")
-        else:
-            workers_list = ""
-            for i in deallocated_workers:
-                workers_list += str(i)
-                if i < deallocated_workers[-1]:
-                    workers_list += ", "
-            print("Deallocated workers " + workers_list + "\n")
-
     def get_matrix_info(self):
         self.driver.get_matrix_info()
 
+    def request_workers(self, num_requested_workers):
+        self.workers.add_workers(self.driver.request_workers(num_requested_workers))
+        self.workers.print()
+        self.workers_connected = self.workers.connect()
+
+    def yield_workers(self, yielded_workers=[]):
+        deallocated_workers = self.driver.yield_workers(yielded_workers)
+        if len(deallocated_workers) == 0:
+            print("No workers were deallocated")
+        else:
+            s = ""
+            if len(deallocated_workers) > 1:
+                s = "s"
+            print("Listing {0} deallocated Alchemist worker{1}:".format(len(deallocated_workers), s))
+            self.workers.print(deallocated_workers)
+
     def list_alchemist_workers(self):
-        return self.driver.list_all_workers()
+        all_workers = self.driver.list_all_workers()
+        if len(all_workers) == 0:
+            print("No Alchemist workers")
+        else:
+            s = ""
+            if len(all_workers) > 1:
+                s = "s"
+            print("Listing {0} Alchemist worker{1}:".format(len(all_workers), s))
+            self.workers.print(all_workers)
 
-    def list_all_workers(self, preamble=""):
-        return self.driver.list_all_workers(preamble)
+    def list_all_workers(self):
+        all_workers = self.driver.list_all_workers()
+        if len(all_workers) == 0:
+            print("No Alchemist workers")
+        else:
+            s = ""
+            if len(all_workers) > 1:
+                s = "s"
+            print("Listing {0} Alchemist worker{1}:".format(len(all_workers), s))
+            self.workers.print(all_workers)
 
-    def list_active_workers(self, preamble=""):
-        return self.driver.list_active_workers(preamble)
+    def list_active_workers(self):
+        active_workers = self.driver.list_active_workers()
+        if len(active_workers) == 0:
+            print("No active Alchemist workers")
+        else:
+            s = ""
+            if len(active_workers) > 1:
+                s = "s"
+            print("Listing {0} active Alchemist worker{1}:".format(len(active_workers), s))
+            self.workers.print(active_workers)
 
-    def list_inactive_workers(self, preamble=""):
-        return self.driver.list_inactive_workers(preamble)
+    def list_inactive_workers(self):
+        inactive_workers = self.driver.list_inactive_workers()
+        if len(inactive_workers) == 0:
+            print("No inactive Alchemist workers")
+        else:
+            s = ""
+            if len(inactive_workers) > 1:
+                s = "s"
+            print("Listing {0} inactive Alchemist worker{1}:".format(len(inactive_workers), s))
+            self.workers.print(inactive_workers)
 
-    def list_assigned_workers(self, preamble=""):
-        return self.driver.list_assigned_workers(preamble)
+    def list_assigned_workers(self):
+        assigned_workers = self.driver.list_assigned_workers()
+        if len(assigned_workers) == 0:
+            print("No assigned Alchemist workers")
+        else:
+            s = ""
+            if len(assigned_workers) > 1:
+                s = "s"
+            print("Listing {0} assigned Alchemist worker{1}:".format(len(assigned_workers), s))
+            self.workers.print(assigned_workers)
 
     def stop(self):
         self.close()

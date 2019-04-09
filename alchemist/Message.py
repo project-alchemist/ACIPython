@@ -3,13 +3,14 @@ import pyarrow as pa
 import time
 import math
 from .Parameter import Parameter
-from .ArrayHandle import ArrayHandle
+from .MatrixHandle import MatrixHandle
+from .WorkerInfo import WorkerInfo
 import struct
 
 
 class Message:
 
-    header_length = 9
+    header_length = 10
     max_body_length = 100000000
 
     commands = {"WAIT": 0,
@@ -32,11 +33,11 @@ class Message:
                 "LIST_AVAILABLE_LIBRARIES": 21,
                 "LOAD_LIBRARY": 22,
                 "UNLOAD_LIBRARY": 23,
-                # Arrays
-                "SEND_ARRAY_INFO": 31,
-                "SEND_ARRAY_LAYOUT": 32,
-                "SEND_ARRAY_BLOCKS": 33,
-                "REQUEST_ARRAY_BLOCKS": 34,
+                # matrixs
+                "SEND_MATRIX_INFO": 31,
+                "SEND_MATRIX_LAYOUT": 32,
+                "SEND_MATRIX_BLOCKS": 34,
+                "REQUEST_MATRIX_BLOCKS": 36,
                 # Tasks
                 "RUN_TASK": 41,
                 # Shutting down
@@ -52,22 +53,29 @@ class Message:
                  "CHAR": 1,
                  "STRING": 46,
                  "COMMAND_CODE": 48,
-                 "PARAMETER": 49,
-                 "LIBRARY_ID": 50,
-                 "ARRAY_ID": 51,
-                 "ARRAY_INFO": 52,
-                 "ARRAY_BLOCK": 53}
+                 "LIBRARY_ID": 49,
+                 "GROUP_ID": 50,
+                 "WORKER_ID": 51,
+                 "WORKER_INFO": 52,
+                 "MATRIX_ID": 53,
+                 "MATRIX_INFO": 54,
+                 "MATRIX_BLOCK": 55,
+                 "PARAMETER": 100}
 
-    message_buffer = bytearray(header_length)
+    errors = {"NONE": 0,
+              "INVALID_HANDSHAKE": 1,
+              "INVALID_CLIENT_ID": 2,
+              "INVALID_SESSION_ID": 3,
+              "INCONSISTENT_DATATYPES": 4}
+
+    message_buffer = bytearray(header_length + max_body_length)
 
     current_datatype = datatypes["NONE"]
-    current_datatype_count = 0
-    current_datatype_count_max = 0
-    current_datatype_count_pos = header_length
 
     client_id = 0
     session_id = 0
     command_code = commands["WAIT"]
+    error_code = errors["NONE"]
     body_length = 0
 
     read_pos = header_length                # for reading data
@@ -87,14 +95,11 @@ class Message:
 
     def reset(self):
         self.current_datatype = self.datatypes["NONE"]
-        self.current_datatype_count = 0
-        self.current_datatype_count_max = 0
-        self.current_datatype_count_pos = self.header_length
 
         self.client_id = 0
         self.session_id = 0
         self.command_code = self.commands["WAIT"]
-
+        self.error_code = self.errors["NONE"]
         self.body_length = 0
 
         self.write_pos = self.header_length
@@ -113,15 +118,20 @@ class Message:
     def get_command_name(self, v):
         return list(self.commands.keys())[list(self.commands.values()).index(v)]
 
+    def get_error_name(self, v):
+        return list(self.errors.keys())[list(self.errors.values()).index(v)]
+
     def get_datatype_name(self, v):
         return list(self.datatypes.keys())[list(self.datatypes.values()).index(v)]
 
-    # Return raw byte array
+    # Return raw byte matrix
     def get(self):
-        self.update_body_length()
-        self.update_datatype()
+        # self.update_body_length()
+        # self.update_datatype()
 
         return self.message_buffer[0:self.header_length + self.body_length]
+
+    # ============================================ Reading data ============================================
 
     # Reading header
     def read_client_id(self):
@@ -133,175 +143,273 @@ class Message:
     def read_command_code(self):
         return self.message_buffer[4]
 
+    def read_error_code(self):
+        return self.message_buffer[5]
+
     def read_body_length(self):
-        return int.from_bytes(self.message_buffer[5:9], 'big')
+        return int.from_bytes(self.message_buffer[6:10], 'big')
 
     def read_header(self):
         self.client_id = self.read_client_id()
         self.session_id = self.read_session_id()
         self.command_code = self.read_command_code()
+        self.error_code = self.read_error_code()
         self.body_length = self.read_body_length()
-        self.read_pos = self.header_length
-        self.write_pos = self.header_length
 
-    # Reading data
-    def read_next_datatype(self):
-        self.current_datatype = self.message_buffer[self.read_pos]
-        self.current_datatype_count = 0
-        self.current_datatype_count_max = int.from_bytes(self.message_buffer[self.read_pos+1:self.read_pos+5], 'big')
-
-        self.read_pos += 5
-
+    # Reading body
     def preview_next_datatype(self):
-        return self.get_datatype_name(self.message_buffer[self.read_pos])
+        return self.message_buffer[self.read_pos]
 
-    def preview_next_datatype_count(self):
-        return int.from_bytes(self.message_buffer[self.read_pos+1:self.read_pos+5], 'big')
-
-    def get_current_datatype(self):
-        return self.current_datatype
-
-    def get_current_datatype_name(self):
-        return self.get_datatype_name(self.current_datatype)
-
-    def get_current_datatype_count(self):
-        return self.current_datatype_count_max
-
-    def read_byte(self):
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
+    def get_code(self):
         self.read_pos += 1
-        self.current_datatype_count += 1
         return int.from_bytes(self.message_buffer[self.read_pos-1:self.read_pos], 'big')
 
-    def read_char(self):
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
+    def get_byte(self):
         self.read_pos += 1
-        self.current_datatype_count += 1
+        return int.from_bytes(self.message_buffer[self.read_pos-1:self.read_pos], 'big')
+
+    def get_char(self):
+        self.read_pos += 1
         return self.message_buffer[self.read_pos-1]
 
-    def read_short(self):
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
+    def get_short(self):
         self.read_pos += 2
-        self.current_datatype_count += 1
         return int.from_bytes(self.message_buffer[self.read_pos-2:self.read_pos], 'big')
 
-    def read_int(self):
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
+    def get_int(self):
         self.read_pos += 4
-        self.current_datatype_count += 1
         return int.from_bytes(self.message_buffer[self.read_pos-4:self.read_pos], 'big')
 
-    def read_long(self):
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
+    def get_long(self):
         self.read_pos += 8
-        self.current_datatype_count += 1
         return int.from_bytes(self.message_buffer[self.read_pos-8:self.read_pos], 'big')
 
-    def read_float(self):
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
+    def get_float(self):
         self.read_pos += 4
-        self.current_datatype_count += 1
-        return struct.unpack('>f', self.message_buffer[self.read_pos-4:self.read_pos])[0]
+        return struct.unpack('>f', self.message_buffer[self.read_pos - 4:self.read_pos])[0]
 
-    def read_double(self):
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
+    def get_double(self):
         self.read_pos += 8
-        self.current_datatype_count += 1
-        return struct.unpack('>d', self.message_buffer[self.read_pos-8:self.read_pos])[0]
+        return struct.unpack('>d', self.message_buffer[self.read_pos - 8:self.read_pos])[0]
 
-    def read_string(self):
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
-        self.current_datatype_count += 1
-        self.read_pos += 4
-        str_length = int.from_bytes(self.message_buffer[self.read_pos - 4:self.read_pos], 'big')
+    def get_string(self):
+        str_length = self.get_short()
         self.read_pos += str_length
         return self.message_buffer[self.read_pos - str_length:self.read_pos].decode('utf-8')
 
-    def read_parameter(self):
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
+    def get_matrix_id(self):
+        return self.get_short()
+
+    def get_matrix_info(self):
+        id = self.get_matrix_id()
+        name = self.get_string()
+        num_rows = self.get_long()
+        num_cols = self.get_long()
+        sparse = self.get_byte()
+        layout = self.get_byte()
+        num_partitions = self.get_short()
+        grid = {}
+        for _ in range(num_partitions):
+            w = self.get_short()
+            r = self.get_short()
+            c = self.get_short()
+            grid[w] = [r, c]
+
+        return MatrixHandle(id, name, num_rows, num_cols, sparse, layout, num_partitions, grid)
+
+    def get_matrix_block(self, matrix=np.zeros((1,1))):
+
+        row_start = self.get_long()
+        row_end = self.get_long()
+        row_skip = self.get_long()
+        col_start = self.get_long()
+        col_end = self.get_long()
+        col_skip = self.get_long()
+
+        row_range = np.array(np.arange(row_start, row_end+1, row_skip), dtype=np.intp)
+        col_range = np.array(np.arange(col_start, col_end+1, col_skip), dtype=np.intp)
+
+        block_num_rows = len(row_range)
+        block_num_cols = len(col_range)
+        num_elements = block_num_rows * block_num_cols
+
+        if matrix.size == 1:
+            matrix = np.zeros((block_num_rows, block_num_cols))
+            ixgrid = np.ix_(np.arange(block_num_rows), np.arange(block_num_cols))
+        else:
+            ixgrid = np.ix_(row_range, col_range)
+
+        matrix[ixgrid] = np.frombuffer(self.message_buffer[self.read_pos:self.read_pos + 8*num_elements], dtype=np.float64).reshape((block_num_rows, block_num_cols))
+        self.read_pos += 8 * num_elements
+
+        return matrix, row_range, col_range
+
+    def get_worker_id(self):
+        return self.get_short()
+
+    def get_worker_info(self):
+        worker_id = self.get_worker_id()
+        hostname = self.get_string()
+        address = self.get_string()
+        port = self.get_short()
+        group_id = self.get_short()
+
+        return WorkerInfo(worker_id, hostname, address, port, group_id)
+
+    def get_parameter(self):
+
+        name = self.read_string()
+        parameter_type = self.preview_next_datatype()
+
+        if parameter_type == self.datatypes["BYTE"]:
+            v = self.read_byte()
+        elif parameter_type == self.datatypes["CHAR"]:
+            v = self.read_char()
+        elif parameter_type == self.datatypes["SHORT"]:
+            v = self.read_short()
+        elif parameter_type == self.datatypes["INT"]:
+            v = self.read_int()
+        elif parameter_type == self.datatypes["LONG"]:
+            v = self.read_long()
+        elif parameter_type == self.datatypes["FLOAT"]:
+            v = self.read_float()
+        elif parameter_type == self.datatypes["DOUBLE"]:
+            v = self.read_double()
+        elif parameter_type == self.datatypes["STRING"]:
+            v = self.read_string()
+        elif parameter_type == self.datatypes["MATRIX_ID"]:
+            v = self.read_matrix_id()
+        elif parameter_type == self.datatypes["MATRIX_INFO"]:
+            v = self.read_matrix_info()
+
+        return Parameter(name, parameter_type, v)
+
+    def read_byte(self):
+
+        if self.get_code() != self.datatypes["BYTE"]:
+            print("Actual datatype does not match expected datatype BYTE")
+            return 0
+        else:
+            return self.get_byte()
+
+    def read_char(self):
+
+        if self.get_code() != self.datatypes["CHAR"]:
+            print("Actual datatype does not match expected datatype CHAR")
+            return 0
+        else:
+            return self.get_char()
+
+    def read_short(self):
+
+        if self.get_code() != self.datatypes["SHORT"]:
+            print("Actual datatype does not match expected datatype SHORT")
+            return 0
+        else:
+            return self.get_short()
+
+    def read_int(self):
+
+        if self.get_code() != self.datatypes["INT"]:
+            print("Actual datatype does not match expected datatype INT")
+            return 0
+        else:
+            return self.get_int()
+
+    def read_long(self):
+
+        if self.get_code() != self.datatypes["LONG"]:
+            print("Actual datatype does not match expected datatype LONG")
+            return 0
+        else:
+            return self.get_long()
+
+    def read_float(self):
+
+        if self.get_code() != self.datatypes["FLOAT"]:
+            print("Actual datatype does not match expected datatype FLOAT")
+            return 0.0
+        else:
+            return self.get_float()
+
+    def read_double(self):
+
+        if self.get_code() != self.datatypes["DOUBLE"]:
+            print("Actual datatype does not match expected datatype DOUBLE")
+            return 0.0
+        else:
+            return self.get_double()
+
+    def read_string(self):
+
+        if self.get_code() != self.datatypes["STRING"]:
+            return "Actual datatype does not match expected datatype STRING"
+        else:
+            return self.get_string()
 
     def read_library_id(self):
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
-        self.current_datatype_count += 1
-        self.read_pos += 1
-        return int.from_bytes(self.message_buffer[self.read_pos-1:self.read_pos], 'big')
 
-    def read_array_id(self):
-        return self.read_short()
+        if self.get_code() != self.datatypes["LIBRARY_ID"]:
+            message = "Actual datatype does not match expected datatype LIBRARY ID"
+            return 0
+        else:
+            return self.get_byte()
 
-    def read_array_info(self):
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
-        self.current_datatype_count += 1
-        array_id = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 2], 'big')
-        self.read_pos += 2
-        name_length = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 4], 'big')
-        self.read_pos += 4
-        name = " "
-        if name_length > 0:
-            name = self.message_buffer[self.read_pos:self.read_pos + name_length].decode('utf-8')
-            self.read_pos += name_length
-        num_rows = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 8], 'big')
-        self.read_pos += 8
-        num_cols = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 8], 'big')
-        self.read_pos += 8
-        sparse = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 1], 'big')
-        self.read_pos += 1
-        layout = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 1], 'big')
-        self.read_pos += 1
-        num_partitions = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 1], 'big')
-        self.read_pos += 1
-        ah = ArrayHandle(array_id, name, num_rows, num_cols, sparse, num_partitions, [])
-        for _ in range(0, num_rows):
-            ah.row_layout.append(int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 1], 'big'))
-            self.read_pos += 1
+    def read_matrix_id(self):
 
-        return ah
+        if self.get_code() != self.datatypes["MATRIX_ID"]:
+            message = "Actual datatype does not match expected datatype MATRIX ID"
+            return 0
+        else:
+            return self.get_short()
 
-    def read_array_block(self, array):
-        rows = [0, 0, 0]
-        cols = [0, 0, 0]
+    def read_matrix_info(self):
 
-        if self.read_pos == self.header_length or self.current_datatype_count == self.current_datatype_count_max:
-            self.read_next_datatype()
-        self.current_datatype_count += 1
-        ndims = self.message_buffer[self.read_pos]
-        self.read_pos += 1
-        size = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 8], 'big')
-        self.read_pos += 8
-        for i in range(3):
-            rows[i] = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 8], 'big')
-            self.read_pos += 8
-            cols[i] = int.from_bytes(self.message_buffer[self.read_pos:self.read_pos + 8], 'big')
-            self.read_pos += 8
+        if self.get_code() != self.datatypes["MATRIX_INFO"]:
+            message = "Actual datatype does not match expected datatype MATRIX INFO"
+            return 0
+        else:
+            return self.get_matrix_info()
 
-        row_range = np.array(np.arange(rows[0], rows[1], rows[2]), dtype=np.intp)
-        col_range = np.array(np.arange(cols[0], cols[1], cols[2]), dtype=np.intp)
+    def read_matrix_block(self, matrix=np.zeros((1,1))):
 
-        num_rows = len(row_range)
-        num_cols = len(col_range)
+        if self.get_code() != self.datatypes["MATRIX_BLOCK"]:
+            message = "Actual datatype does not match expected datatype MATRIX BLOCK"
+            return 0
+        else:
+            return self.get_matrix_block(matrix)
 
-        array[np.ix_(row_range, col_range)] = np.frombuffer(self.message_buffer[self.read_pos:self.read_pos + 8*size], dtype=np.float64).reshape(num_rows, num_cols)
-        self.read_pos += 8 * size
+    def read_worker_id(self):
 
-        return array
+        if self.get_code() != self.datatypes["WORKER_ID"]:
+            message = "Actual datatype does not match expected datatype WORKER ID"
+            return 0
+        else:
+            return self.get_short()
 
+    def read_worker_info(self):
 
-    # Writing data
-    def start(self, client_id, session_id, command):
+        if self.get_code() != self.datatypes["WORKER_INFO"]:
+            message = "Actual datatype does not match expected datatype WORKER INFO"
+            return 0
+        else:
+            return self.get_worker_info()
+
+    def read_parameter(self):
+
+        if self.get_code() != self.datatypes["PARAMETER"]:
+            print("Actual datatype does not match expected datatype PARAMETER")
+            return []
+        else:
+            return self.get_parameter()
+
+    # ============================================ Writing data ============================================
+
+    def start(self, client_id, session_id, command_code, error_code="NONE"):
         self.message_buffer[0:2] = client_id.to_bytes(2, 'big')
         self.message_buffer[2:4] = session_id.to_bytes(2, 'big')
-        self.message_buffer[4] = self.commands[command]
+        self.message_buffer[4] = self.commands[command_code]
+        self.message_buffer[5] = self.errors[error_code]
 
         return self
 
@@ -317,119 +425,82 @@ class Message:
 
         return self
 
-    def put_byte(self, value, pos):
-        self.message_buffer[pos] = value.to_bytes(1, 'big')[0]
-
-    def write_byte(self, value):
-        self.check_datatype("BYTE")
-        self.put_byte(value, self.write_pos)
-
+    def put_datatype(self, name):
+        self.message_buffer[self.write_pos] = self.datatypes[name].to_bytes(1, 'big')[0]
         self.write_pos += 1
 
         return self
 
-    def put_char(self, value, pos):
-        self.message_buffer[pos] = value.encode('utf-8')[0]
-
-    def write_char(self, value):
-        self.check_datatype("CHAR")
-        self.put_char(value, self.write_pos)
-
+    def put_byte(self, value):
+        self.message_buffer[self.write_pos] = value.to_bytes(1, 'big')[0]
         self.write_pos += 1
 
         return self
 
-    def put_short(self, value, pos):
-        self.message_buffer[pos:pos+2] = value.to_bytes(2, 'big')
+    def put_char(self, value):
+        self.message_buffer[self.write_pos] = value.encode('utf-8')[0]
+        self.write_pos += 1
 
-    def write_short(self, value):
-        self.check_datatype("SHORT")
-        self.put_short(value, self.write_pos)
+        return self
 
+    def put_short(self, value):
+        self.message_buffer[self.write_pos:self.write_pos+2] = value.to_bytes(2, 'big')
         self.write_pos += 2
 
         return self
 
-    def put_int(self, value, pos):
-        self.message_buffer[pos:pos+4] = value.to_bytes(4, 'big')
-
-    def write_int(self, value):
-        self.check_datatype("INT")
-        self.put_int(value, self.write_pos)
-
+    def put_int(self, value):
+        self.message_buffer[self.write_pos:self.write_pos+4] = value.to_bytes(4, 'big')
         self.write_pos += 4
 
         return self
 
-    def put_long(self, value, pos):
-        self.message_buffer[pos:pos+8] = value.to_bytes(8, 'big')
-
-    def write_long(self, value):
-        self.check_datatype("LONG")
-        self.put_long(value, self.write_pos)
-
+    def put_long(self, value):
+        self.message_buffer[self.write_pos:self.write_pos+8] = value.to_bytes(8, 'big')
         self.write_pos += 8
 
         return self
 
-    def put_float(self, value, pos):
-        self.message_buffer[pos:pos+4] = struct.pack('>f', value)
-
-    def write_float(self, value):
-        self.check_datatype("FLOAT")
-        self.put_float(value, self.write_pos)
-
+    def put_float(self, value):
+        self.message_buffer[self.write_pos:self.write_pos+4] = struct.pack('>f', value)
         self.write_pos += 4
 
         return self
 
-    def put_double(self, value, pos):
-        self.message_buffer[pos:pos+8] = struct.pack('>d', value)
-
-    def write_double(self, value):
-        self.check_datatype("DOUBLE")
-        self.put_double(value, self.write_pos)
-
+    def put_double(self, value):
+        self.message_buffer[self.write_pos:self.write_pos+8] = struct.pack('>d', value)
         self.write_pos += 8
 
         return self
 
-    def put_string(self, value, pos, length):
-        self.message_buffer[pos:pos+length] = value.encode('utf-8')
-
-    def write_string(self, value):
-        self.check_datatype("STRING")
-        self.put_int(len(value), self.write_pos)
-        self.write_pos += 4
-        self.put_string(value, self.write_pos, len(value))
-        self.write_pos += len(value)
+    def put_string(self, s):
+        self.put_short(len(s))
+        self.message_buffer[self.write_pos:self.write_pos+len(s)] = s.encode('utf-8')
+        self.write_pos += len(s)
 
         return self
 
-    def put_array_id(self, value, pos):
-        self.message_buffer[pos:pos+2] = value.to_bytes(2, 'big')
-
-    def write_array_id(self, value):
-        self.check_datatype("ARRAY_ID")
-        self.put_array_id(value, self.write_pos)
-
+    def put_matrix_id(self, v):
+        self.message_buffer[self.write_pos:self.write_pos+2] = v.to_bytes(2, 'big')
         self.write_pos += 2
 
         return self
 
-    def write_array_block(self, block, rows, cols):
+    def put_library_id(self, v):
+        self.message_buffer[self.write_pos] = v.to_bytes(1, 'big')[0]
+        self.write_pos += 1
 
-        self.check_datatype("ARRAY_BLOCK")
-        ndims = 2
-        self.message_buffer[self.write_pos] = ndims.to_bytes(1, 'big')[0]
-        self.write_pos = self.write_pos + 1
-        self.message_buffer[self.write_pos:self.write_pos + 8] = block.size.to_bytes(8, 'big')
-        self.write_pos = self.write_pos + 8
-        for i in range(3):
-            self.message_buffer[self.write_pos:self.write_pos + 8] = rows[i].to_bytes(8, 'big')
-            self.write_pos = self.write_pos + 8
-            self.message_buffer[self.write_pos:self.write_pos + 8] = cols[i].to_bytes(8, 'big')
-            self.write_pos = self.write_pos + 8
+        return self
+
+    def put_matrix_block(self, block, rows, cols):
+
+        self.put_long(rows[0])
+        self.put_long(rows[1])
+        self.put_long(rows[2])
+        self.put_long(cols[0])
+        self.put_long(cols[1])
+        self.put_long(cols[2])
+
         if block.size > 0:
             # start = time.time()
             # self.message_buffer[self.write_pos:self.write_pos + 8*block.size] = block.tobytes('C')
@@ -440,157 +511,177 @@ class Message:
             # self.message_buffer[self.write_pos:self.write_pos + 8*block.size] = pa.serialize(block).to_buffer()
             # send_time = time.time() - start
             # print("Send time 2 {0}".format(send_time))
-            self.message_buffer[self.write_pos:self.write_pos + 8*block.size] = block.tobytes('C')
+            self.message_buffer[self.write_pos:self.write_pos + 8 * block.size] = block.tobytes('C')
             self.write_pos += 8 * block.size
 
         return self
 
-    def put_library_id(self, value, pos):
-        self.message_buffer[pos] = value.to_bytes(1, 'big')[0]
+    def put_parameter(self, p):
+
+        self.write_string(p.name)
+        if p.datatype == self.datatypes["BYTE"]:
+            self.write_byte(p.value)
+        elif p.datatype == self.datatypes["CHAR"]:
+            self.write_char(p.value)
+        elif p.datatype == self.datatypes["SHORT"]:
+            self.write_short(p.value)
+        elif p.datatype == self.datatypes["INT"]:
+            self.write_int(p.value)
+        elif p.datatype == self.datatypes["LONG"]:
+            self.write_long(p.value)
+        elif p.datatype == self.datatypes["FLOAT"]:
+            self.write_float(p.value)
+        elif p.datatype == self.datatypes["DOUBLE"]:
+            self.write_double(p.value)
+        elif p.datatype == self.datatypes["STRING"]:
+            self.write_string(p.value)
+        elif p.datatype == self.datatypes["MATRIX_ID"]:
+            self.write_matrix_id(p.value)
+
+    def write_byte(self, value):
+        self.put_datatype("BYTE")
+        self.put_byte(value)
+
+        return self
+
+    def write_char(self, value):
+        self.put_datatype("CHAR")
+        self.put_char(value)
+
+        return self
+
+    def write_short(self, value):
+        self.put_datatype("SHORT")
+        self.put_short(value)
+
+        return self
+
+    def write_int(self, value):
+        self.put_datatype("INT")
+        self.put_int(value)
+
+        return self
+
+    def write_long(self, value):
+        self.put_datatype("LONG")
+        self.put_long(value)
+
+        return self
+
+    def write_float(self, value):
+        self.put_datatype("FLOAT")
+        self.put_float(value)
+
+        return self
+
+    def write_double(self, value):
+        self.put_datatype("DOUBLE")
+        self.put_double(value)
+
+        return self
+
+    def write_string(self, value):
+        self.put_datatype("STRING")
+        self.put_string(value)
+
+        return self
+
+    def write_matrix_id(self, value):
+        self.put_datatype("MATRIX_ID")
+        self.put_matrix_id(value)
+
+        return self
+
+    def write_matrix_block(self, block, rows, cols):
+        self.put_datatype("MATRIX_BLOCK")
+        self.put_matrix_block(block, rows, cols)
+
+        return self
 
     def write_library_id(self, value):
-        self.check_datatype("LIBRARY_ID")
-        self.put_library_id(value, self.write_pos)
-
-        self.write_pos += 1
+        self.put_datatype("LIBRARY_ID")
+        self.put_library_id(value)
 
         return self
 
-    def write_parameter(self):
-        self.check_datatype("PARAMETER")
+    def write_parameter(self, p):
+        self.put_datatype("PARAMETER")
+        self.put_parameter(p)
 
         return self
 
-    # ========================================================================================
-
-    def check_datatype(self, t):
-        if self.current_datatype != self.datatypes[t]:
-            self.current_datatype = self.datatypes[t]
-
-            if self.current_datatype_count_pos > self.header_length:
-                self.put_int(self.current_datatype_count, self.current_datatype_count_pos)
-
-            self.put_byte(self.current_datatype, self.write_pos)
-
-            self.current_datatype_count = 1
-            self.current_datatype_count_pos = self.write_pos + 1
-            self.write_pos += 5
-        else:
-            self.current_datatype_count += 1
+    # ==================================================================================================
 
     def update_body_length(self):
         self.body_length = self.write_pos - self.header_length
-        self.message_buffer[5:9] = self.body_length.to_bytes(4, 'big')
+        self.message_buffer[6:10] = self.body_length.to_bytes(4, 'big')
 
-    def update_datatype(self):
-        if self.current_datatype_count_pos > self.header_length:
-            self.put_int(self.current_datatype_count, self.current_datatype_count_pos)
+    def reset_write_position(self):
+        self.write_pos = self.header_length
+
+    def reset_read_position(self):
+        self.read_pos = self.header_length
 
     def finish(self):
         self.update_body_length()
-        self.update_datatype()
+        self.read_header()
+        self.reset_write_position()
 
     # ========================================================================================
 
     def print(self):
 
-        space = "                         "
+        space = "                   "
 
-        temp_client_id = int.from_bytes(self.message_buffer[0:2], 'big')
-        temp_session_id = int.from_bytes(self.message_buffer[2:4], 'big')
-        temp_command_code = self.message_buffer[4]
-        temp_body_length = int.from_bytes(self.message_buffer[5:9], 'big')
+        self.read_header()
 
         print(" ")
-        print("{} ==============================================".format(space))
-        print("{} Client ID:            {}".format(space, temp_client_id))
-        print("{} Session ID:           {}".format(space, temp_session_id))
-        print("{} Command code:         {} ({})".format(space, temp_command_code, self.get_command_name(temp_command_code)))
-        print("{} Message body length:  {}".format(space, temp_body_length))
-        print("{} ----------------------------------------------".format(space))
+        print("{} ==================================================================".format(space))
+        print("{}  Client ID:            {}".format(space, self.client_id))
+        print("{}  Session ID:           {}".format(space, self.session_id))
+        print("{}  Command code:         {} ({})".format(space, self.command_code, self.get_command_name(self.command_code)))
+        print("{}  Error code:           {} ({})".format(space, self.error_code, self.get_error_name(self.error_code)))
+        print("{}  Message body length:  {}".format(space, self.body_length))
+        print("{} -----------------------------------------------------------------".format(space))
 
-        i = self.header_length
+        while not self.eom():
+            next_datatype = self.preview_next_datatype()
 
-        while i < self.header_length + temp_body_length:
+            if next_datatype == self.datatypes["BYTE"]:
+                data = " {0:18s}    {1}".format("BYTE", int(self.read_byte()))
+            elif next_datatype == self.datatypes["CHAR"]:
+                data = " {0:18s}    {1}".format("CHAR", self.read_char())
+            elif next_datatype == self.datatypes["SHORT"]:
+                data = " {0:18s}    {1}".format("SHORT", self.read_short())
+            elif next_datatype == self.datatypes["INT"]:
+                data = " {0:18s}    {1}".format("INT", self.read_int())
+            elif next_datatype == self.datatypes["LONG"]:
+                data = " {0:18s}    {1}".format("LONG", self.read_long())
+            elif next_datatype == self.datatypes["FLOAT"]:
+                data = " {0:18s}    {1}".format("FLOAT", self.read_float())
+            elif next_datatype == self.datatypes["DOUBLE"]:
+                data = " {0:18s}    {1}".format("DOUBLE", self.read_double())
+            elif next_datatype == self.datatypes["STRING"]:
+                data = " {0:18s}    {1}".format("STRING", self.read_string())
+            elif next_datatype == self.datatypes["LIBRARY_ID"]:
+                data = " {0:18s}    {1}".format("LIBRARY ID", self.read_library_id())
+            elif next_datatype == self.datatypes["MATRIX_ID"]:
+                data = " {0:18s}    {1}".format("MATRIX ID", self.read_matrix_id())
+            elif next_datatype == self.datatypes["MATRIX_INFO"]:
+                data = " {0:18s}    \n{1}".format("MATRIX INFO", self.read_matrix_info().to_string(display_layout=True, space=space + "{0:23s}".format(" ")))
+            elif next_datatype == self.datatypes["MATRIX_BLOCK"]:
+                block, row_range, col_range = self.read_matrix_block()
+                block_string = "{0}x{1} | {2} | {3}".format(block.shape[0], block.shape[1], row_range, col_range)
+                data = " {0:18s}    {1}".format("MATRIX BLOCK", block_string)
+            elif next_datatype == self.datatypes["WORKER_ID"]:
+                data = " {0:18s}    {1}".format("WORKER ID", self.read_worker_id())
+            elif next_datatype == self.datatypes["WORKER_INFO"]:
+                data = " {0:18s}    \n{1}".format("WORKER INFO", self.read_worker_info().to_string(space + "{0:23s}".format(" ")))
+            elif next_datatype == self.datatypes["PARAMETER"]:
+                data = " {0:18s}    {1}".format("PARAMETER", self.read_parameter().to_string())
 
-            data_array_type = self.get_datatype_name(self.message_buffer[i])
-            data_array_length = int.from_bytes(self.message_buffer[i+1:i+5], 'big')
+            print("{} {}".format(space, data))
 
-            print("{} Datatype (length):    {} ({})".format(space, data_array_type, data_array_length))
+        print("{} ==================================================================".format(space))
 
-            data = ""
-            i += 5
-
-            for j in range(0, data_array_length):
-                if data_array_type == "BYTE":
-                    data += str(self.message_buffer[i]) + " "
-                    i += 1
-                elif data_array_type == "CHAR":
-                    data += str(self.message_buffer[i]) + " "
-                    i += 1
-                elif data_array_type == "SHORT":
-                    data += str(int.from_bytes(self.message_buffer[i:i+2], 'big')) + " "
-                    i += 2
-                elif data_array_type == "INT":
-                    data += str(int.from_bytes(self.message_buffer[i:i+4], 'big')) + " "
-                    i += 4
-                elif data_array_type == "LONG":
-                    data += str(int.from_bytes(self.message_buffer[i:i+8], 'big')) + " "
-                    i += 8
-                elif data_array_type == "FLOAT":
-                    data += str(struct.unpack('>f', self.message_buffer[i:i+4])[0]) + " "
-                    i += 4
-                elif data_array_type == "DOUBLE":
-                    data += str(struct.unpack('>d', self.message_buffer[i:i+8])[0]) + " "
-                    i += 8
-                elif data_array_type == "LIBRARY_ID":
-                    data += str(self.message_buffer[i]) + " "
-                    i += 1
-                elif data_array_type == "ARRAY_ID":
-                    data += str(int.from_bytes(self.message_buffer[i:i+2], 'big')) + " "
-                    i += 2
-                elif data_array_type == "STRING":
-                    str_length = int.from_bytes(self.message_buffer[i:i + 4], 'big')
-                    i += 4
-                    if str_length > 0:
-                        data += self.message_buffer[i:i + str_length].decode('utf-8')
-                        i += str_length
-                    if j < data_array_length-1:
-                        data += "\n" + space + "                       "
-                elif data_array_type == "ARRAY_INFO":
-                    id = int.from_bytes(self.message_buffer[i:i + 2], 'big')
-                    i += 2
-                    name_length = int.from_bytes(self.message_buffer[i:i + 4], 'big')
-                    i += 4
-                    name = " "
-                    if name_length > 0:
-                        name = self.message_buffer[i:i + name_length].decode('utf-8')
-                        i += name_length
-                    num_rows = int.from_bytes(self.message_buffer[i:i + 8], 'big')
-                    i += 8
-                    num_cols = int.from_bytes(self.message_buffer[i:i + 8], 'big')
-                    i += 8
-                    sparse = int.from_bytes(self.message_buffer[i:i + 1], 'big')
-                    i += 1
-                    layout = int.from_bytes(self.message_buffer[i:i + 1], 'big')
-                    i += 1
-                    num_partitions = int.from_bytes(self.message_buffer[i:i + 1], 'big')
-                    i += 1
-                    ah = ArrayHandle(id, name, num_rows, num_cols, sparse, num_partitions, [])
-                    for _ in range(0, num_rows):
-                        ah.row_layout.append(int.from_bytes(self.message_buffer[i:i + 1], 'big'))
-                        i += 1
-
-                    if j < data_array_length-1:
-                        data += "\n" + space + "                       "
-                elif data_array_type == "ARRAY_BLOCK":
-                    ndims = int.from_bytes(self.message_buffer[i:i + 1])
-                    i += 1
-                elif data_array_type == "PARAMETER":
-                    data += " "
-
-            print("{} Data:                 {}".format(space, data))
-            if i < self.header_length + temp_body_length:
-                print(" ")
-
-        print("{} ==============================================".format(space))
+        self.reset_read_position()

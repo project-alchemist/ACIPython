@@ -29,18 +29,18 @@ class TestLib:
         if name == "truncated_svd":
 
             for key, value in kwargs.items():
-                if key == "A":
-                    in_args[key] = Parameter(key, "ARRAY_ID", value)
+                if key == "Aa":
+                    in_args[key] = Parameter(key, Parameter.datatypes["MATRIX_ID"], value)
                 elif key == "rank":
-                    in_args[key] = Parameter(key, "INT", value)
+                    in_args[key] = Parameter(key, Parameter.datatypes["INT"], value)
 
         return in_args
 
     def truncated_svd(self, A, rank):
 
         in_args = {}
-        in_args["A"] = Parameter("A", "ARRAY_ID", A.id)
-        in_args["rank"] = Parameter("rank", "INT", rank)
+        in_args["A"] = Parameter("A", Parameter.datatypes["MATRIX_ID"], A.id)
+        in_args["rank"] = Parameter("rank", Parameter.datatypes["INT"], rank)
 
         self.als.display_parameters(in_args, "List of input parameters:")
 
@@ -57,8 +57,8 @@ class TestLib:
     def greet(self, rank, bb):
 
         in_args = {}
-        in_args["rank"] = Parameter("rank", "INT", rank)
-        in_args["bb"] = Parameter("bb", "DOUBLE", bb)
+        in_args["rank"] = Parameter("rank", Parameter.datatypes["INT"], rank)
+        in_args["bb"] = Parameter("bb", Parameter.datatypes["DOUBLE"], bb)
 
         self.als.display_parameters(in_args, "List of input parameters:")
 
