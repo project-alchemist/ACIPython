@@ -45,20 +45,20 @@ class AlchemistSession:
 
         print("Sending array info to Alchemist ... ", end="", flush=True)
         start = time.time()
-        ah = self.get_matrix_handle(matrix, layout=layout)
+        mh = self.get_matrix_handle(matrix, layout=layout)
         end = time.time()
         print("done ({0:.4e}s)".format(end - start))
 
         print("Sending array data to Alchemist ... ", end="", flush=True)
         start = time.time()
-        times = self.workers.send_matrix_blocks(ah, matrix)
+        times = self.workers.send_matrix_blocks(mh, matrix)
         end = time.time()
         print("done ({0:.4e}s)".format(end - start))
         if print_times:
-            self.print_times(times, name=ah.name)
+            self.print_times(times, name=mh.name)
         #     self.driver.send_block(mh, block)
 
-        return ah
+        return mh
 
     def fetch_matrix(self, mh, print_times=False):
 
@@ -131,7 +131,7 @@ class AlchemistSession:
 
                 self.libraries[lib_id] = library
 
-                print("Library \'{name}\' at {path} successfully loaded.".format(name=name, path=path))
+                print("Library \'{name}\' successfully loaded.".format(name=name, path=path))
                 return library
 
     def run_task(self, lib_id, name, in_args):

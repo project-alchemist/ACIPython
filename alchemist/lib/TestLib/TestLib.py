@@ -46,7 +46,7 @@ class TestLib:
 
         self.output_parameters = self.als.run_task(self.id, "truncated_svd", in_args)
 
-        self.als.display_parameters(self.output_parameters, "List of output parameters:")
+        # self.als.display_parameters(self.output_parameters, "List of output parameters:")
 
         U = self.output_parameters["U"].value
         V = self.output_parameters["V"].value

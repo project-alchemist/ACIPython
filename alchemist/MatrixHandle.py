@@ -1,3 +1,5 @@
+from .ProcessGrid import ProcessGrid
+
 class MatrixHandle:
 
     layouts = {"MC_MR": 0,
@@ -24,24 +26,24 @@ class MatrixHandle:
     num_partitions = 0
     grid = {}
 
-    def __init__(self, id=0, name="", num_rows=0, num_cols=0, sparse=0, layout=0, num_partitions=0, grid={}):
+    def __init__(self, id=0, name="", num_rows=0, num_cols=0, sparse=0, layout=0, grid=ProcessGrid()):
         self.id = id
         self.name = name
         self.num_rows = num_rows
         self.num_cols = num_cols
         self.sparse = sparse
         self.layout = layout
-        self.num_partitions = num_partitions
+        self.num_partitions = grid.num_rows * grid.num_cols
         self.grid = grid
 
-    def set(self, id, name="", num_rows=0, num_cols=0, sparse=0, layout=0, num_partitions=0, grid={}):
+    def set(self, id, name="", num_rows=0, num_cols=0, sparse=0, layout=0, grid=ProcessGrid()):
         self.id = id
         self.name = name
         self.num_rows = num_rows
         self.num_cols = num_cols
         self.sparse = sparse
         self.layout = layout
-        self.num_partitions = num_partitions
+        self.num_partitions = grid.num_rows * grid.num_cols
         self.grid = grid
         return self
 

@@ -22,8 +22,10 @@ class Client:
 
     connected = False
 
-    input_message = Message()
-    output_message = Message()
+    buffer_length = 100000010
+
+    input_message = Message(100000010)
+    output_message = Message(100000010)
 
     def __init__(self, id=0, hostname="host", address="0.0.0.0", port=24960):
         self.id = id
@@ -69,20 +71,23 @@ class Client:
         try:
             self.output_message.finish()
             # self.output_message.print()
+            start_time = time.time()
             self.sock.sendall(self.output_message.get())
+            send_time = time.time() - start_time
             self.output_message.reset()
-            return True
+            return True, send_time
         except InterruptedError:
             print("ERROR: Unable to send message (InterruptedError)")
-            self.reset_socket()
+            self.reset_socket(), 0.0
         except ConnectionError:
             print("ERROR: Unable to send message (ConnectionError)")
-            self.reset_socket()
+            self.reset_socket(), 0.0
 
     def receive_message(self):
         try:
             header = self.sock.recv(self.input_message.get_header_length())
             self.input_message.reset()
+            start_time = time.time()
             self.input_message.add_header(header)
             remaining_body_length = self.input_message.get_body_length()
             while remaining_body_length > 0:
@@ -91,14 +96,15 @@ class Client:
                     return False
                 remaining_body_length -= len(packet)
                 self.input_message.add_packet(packet)
-            # self.input_message.print()
-            return True
+            receive_time = time.time() - start_time
+            # self.input_message.print()oi0=[]]]]
+            return True, receive_time
         except InterruptedError:
             print("ERROR: Unable to send message (InterruptedError)")
-            return self.reset_socket
+            return self.reset_socket, 0.0
         except ConnectionError:
             print("ERROR: Unable to send message (ConnectionError)")
-            return self.reset_socket
+            return self.reset_socket, 0.0
 
     def handshake(self):
         self.output_message.start(0, 0, "HANDSHAKE")
@@ -109,6 +115,8 @@ class Client:
         self.output_message.write_double(2.22)
         test_matrix = 1.11*np.arange(3, 15).reshape((4, 3))
         self.output_message.write_matrix_block(test_matrix, [0, 3, 1], [0, 2, 1])
+        buffer_length = self.output_message.max_body_length + self.output_message.header_length
+        self.output_message.write_int(buffer_length)
         self.send_message()
         self.receive_message()
 
@@ -333,12 +341,10 @@ class WorkerClient(Client):
         self.output_message.write_matrix_block(matrix[np.ix_(row_range, col_range)], rows, cols)
         times.append(time.time() - start)
 
-        start = time.time()
-        self.send_message()
-        times.append(time.time() - start)
-        start = time.time()
-        self.receive_message()
-        times.append(time.time() - start)
+        _, send_time = self.send_message()
+        times.append(send_time)
+        _, receive_time = self.receive_message()
+        times.append(receive_time)
         start = time.time()
         self.input_message.read_matrix_id()
         times.append(time.time() - start)
@@ -366,12 +372,11 @@ class WorkerClient(Client):
         self.output_message.write_long(cols[1])
         self.output_message.write_long(cols[2])
         times.append(time.time() - start)
-        start = time.time()
-        self.send_message()
-        times.append(time.time() - start)
-        start = time.time()
-        self.receive_message()
-        times.append(time.time() - start)
+        
+        _, send_time = self.send_message()
+        times.append(send_time)
+        _, receive_time = self.receive_message()
+        times.append(receive_time)
         start = time.time()
         self.input_message.read_matrix_id()
         matrix, row_range, col_range = self.input_message.read_matrix_block(matrix)
@@ -381,14 +386,14 @@ class WorkerClient(Client):
     def get_layout(self, mh):
 
         col_skip = 0
-        for k, v in mh.grid.items():
+        for k, v in mh.grid.array.items():
             col_skip += 1
             if v[0] == 1:
                 break
 
         row_start = 0
         col_start = 0
-        for k, v in mh.grid.items():
+        for k, v in mh.grid.array.items():
             if k == self.id:
                 row_start = v[0]
                 col_start = v[1]

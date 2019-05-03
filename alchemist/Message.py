@@ -4,6 +4,7 @@ import time
 import math
 from .Parameter import Parameter
 from .MatrixHandle import MatrixHandle
+from .ProcessGrid import ProcessGrid
 from .WorkerInfo import WorkerInfo
 import struct
 
@@ -81,8 +82,8 @@ class Message:
     read_pos = header_length                # for reading data
     write_pos = header_length               # for writing data
 
-    def __init__(self):
-        self.set_max_length(self.max_body_length)
+    def __init__(self, buffer_length):
+        self.set_max_length(buffer_length)
         self.reset()
 
     def eom(self):
@@ -207,15 +208,17 @@ class Message:
         num_cols = self.get_long()
         sparse = self.get_byte()
         layout = self.get_byte()
-        num_partitions = self.get_short()
+        num_grid_rows = self.get_short()
+        num_grid_cols = self.get_short()
         grid = {}
-        for _ in range(num_partitions):
+        for _ in range(num_grid_rows * num_grid_cols):
             w = self.get_short()
             r = self.get_short()
             c = self.get_short()
             grid[w] = [r, c]
+        pgrid = ProcessGrid(num_grid_rows, num_grid_cols, grid)
 
-        return MatrixHandle(id, name, num_rows, num_cols, sparse, layout, num_partitions, grid)
+        return MatrixHandle(id, name, num_rows, num_cols, sparse, layout, pgrid)
 
     def get_matrix_block(self, matrix=np.zeros((1,1))):
 
@@ -492,7 +495,14 @@ class Message:
 
         return self
 
+
     def put_matrix_block(self, block, rows, cols):
+
+        if rows[1] == 0:
+            rows[1] = block.shape[0]
+
+        if cols[1] == 0:
+            cols[1] = block.shape[1]
 
         self.put_long(rows[0])
         self.put_long(rows[1])
@@ -592,7 +602,7 @@ class Message:
 
         return self
 
-    def write_matrix_block(self, block, rows, cols):
+    def write_matrix_block(self, block, rows=[0, 0, 1], cols=[0, 0, 1]):
         self.put_datatype("MATRIX_BLOCK")
         self.put_matrix_block(block, rows, cols)
 
