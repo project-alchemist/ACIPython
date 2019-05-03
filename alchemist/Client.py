@@ -44,7 +44,7 @@ class Client:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
             # Connect the socket to the port where Alchemist is listening
-            server_address = (self.address, self.port)
+            server_address = (self.hostname, self.port)
             print('Connecting to Alchemist at {0}:{1} ...'.format(*server_address), end="", flush=True)
             try:
                 self.sock.connect(server_address)
@@ -372,7 +372,7 @@ class WorkerClient(Client):
         self.output_message.write_long(cols[1])
         self.output_message.write_long(cols[2])
         times.append(time.time() - start)
-        
+
         _, send_time = self.send_message()
         times.append(send_time)
         _, receive_time = self.receive_message()

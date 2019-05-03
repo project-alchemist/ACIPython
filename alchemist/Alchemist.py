@@ -155,8 +155,8 @@ class AlchemistSession:
         #             dt_name = name
         #     print(spacing + key + " = " + str(value.value) + " (" + dt_name + ")")
 
-    def connect_to_alchemist(self, address, port):
-        self.driver.address = address
+    def connect_to_alchemist(self, hostname, port):
+        self.driver.hostname = hostname
         self.driver.port = port
 
         self.driver.connect()
