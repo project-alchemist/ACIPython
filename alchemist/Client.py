@@ -48,19 +48,19 @@ class Client:
             print('Connecting to Alchemist at {0}:{1} ...'.format(*server_address), end="", flush=True)
             try:
                 self.sock.connect(server_address)
+
+                if self.handshake():
+                    self.connected = True
+                    print("Connected to Alchemist!")
+                else:
+                    self.connected = False
+                    print("Unable to connect to Alchemist")
             except socket.gaierror:
                 self.connected = False
                 print("ERROR: Address-related error connecting to Alchemist")
             except ConnectionRefusedError:
                 self.connected = False
                 print("ERROR: Alchemist appears to be offline")
-
-            if self.handshake():
-                self.connected = True
-                print("Connected to Alchemist!")
-            else:
-                self.connected = False
-                print("Unable to connect to Alchemist")
 
         return self.connected
 
@@ -70,7 +70,7 @@ class Client:
     def send_message(self):
         try:
             self.output_message.finish()
-            # self.output_message.print()
+            self.output_message.print()
             start_time = time.time()
             self.sock.sendall(self.output_message.get())
             send_time = time.time() - start_time
@@ -97,7 +97,7 @@ class Client:
                 remaining_body_length -= len(packet)
                 self.input_message.add_packet(packet)
             receive_time = time.time() - start_time
-            # self.input_message.print()oi0=[]]]]
+            self.input_message.print()
             return True, receive_time
         except InterruptedError:
             print("ERROR: Unable to send message (InterruptedError)")
@@ -241,7 +241,7 @@ class DriverClient(Client):
         self.send_message()
         self.receive_message()
         num_allocated_workers = self.input_message.read_short()
-        print("Total allocated {} workers:".format(num_allocated_workers))
+        print("{} allocated workers:".format(num_allocated_workers))
         workers = []
         for i in range(0, num_allocated_workers):
             workers.append(self.input_message.read_worker_info())
