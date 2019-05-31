@@ -641,57 +641,57 @@ class Message:
 
     def print(self):
 
-        space = "                   "
+        space = "{0:8s}".format(" ")
 
         self.read_header()
 
         print(" ")
-        print("{} ==================================================================".format(space))
-        print("{}  Client ID:            {}".format(space, self.client_id))
-        print("{}  Session ID:           {}".format(space, self.session_id))
-        print("{}  Command code:         {} ({})".format(space, self.command_code, self.get_command_name(self.command_code)))
-        print("{}  Error code:           {} ({})".format(space, self.error_code, self.get_error_name(self.error_code)))
-        print("{}  Message body length:  {}".format(space, self.body_length))
-        print("{} -----------------------------------------------------------------".format(space))
+        print("{} ================================================================================".format(space))
+        print("{}  Client ID:                  {}".format(space, self.client_id))
+        print("{}  Session ID:                 {}".format(space, self.session_id))
+        print("{}  Command code:               {} ({})".format(space, self.command_code, self.get_command_name(self.command_code)))
+        print("{}  Error code:                 {} ({})".format(space, self.error_code, self.get_error_name(self.error_code)))
+        print("{}  Message body length:        {}".format(space, self.body_length))
+        print("{} -------------------------------------------------------------------------------".format(space))
 
         while not self.eom():
             next_datatype = self.preview_next_datatype()
 
             if next_datatype == self.datatypes["BYTE"]:
-                data = " {0:18s}    {1}".format("BYTE", int(self.read_byte()))
+                data = " {0:24s}    {1}".format("BYTE", int(self.read_byte()))
             elif next_datatype == self.datatypes["CHAR"]:
-                data = " {0:18s}    {1}".format("CHAR", self.read_char())
+                data = " {0:24s}    {1}".format("CHAR", self.read_char())
             elif next_datatype == self.datatypes["SHORT"]:
-                data = " {0:18s}    {1}".format("SHORT", self.read_short())
+                data = " {0:24s}    {1}".format("SHORT", self.read_short())
             elif next_datatype == self.datatypes["INT"]:
-                data = " {0:18s}    {1}".format("INT", self.read_int())
+                data = " {0:24s}    {1}".format("INT", self.read_int())
             elif next_datatype == self.datatypes["LONG"]:
-                data = " {0:18s}    {1}".format("LONG", self.read_long())
+                data = " {0:24s}    {1}".format("LONG", self.read_long())
             elif next_datatype == self.datatypes["FLOAT"]:
-                data = " {0:18s}    {1}".format("FLOAT", self.read_float())
+                data = " {0:24s}    {1}".format("FLOAT", self.read_float())
             elif next_datatype == self.datatypes["DOUBLE"]:
-                data = " {0:18s}    {1}".format("DOUBLE", self.read_double())
+                data = " {0:24s}    {1}".format("DOUBLE", self.read_double())
             elif next_datatype == self.datatypes["STRING"]:
-                data = " {0:18s}    {1}".format("STRING", self.read_string())
+                data = " {0:24s}    {1}".format("STRING", self.read_string())
             elif next_datatype == self.datatypes["LIBRARY_ID"]:
-                data = " {0:18s}    {1}".format("LIBRARY ID", self.read_library_id())
+                data = " {0:24s}    {1}".format("LIBRARY ID", self.read_library_id())
             elif next_datatype == self.datatypes["MATRIX_ID"]:
-                data = " {0:18s}    {1}".format("MATRIX ID", self.read_matrix_id())
+                data = " {0:24s}    {1}".format("MATRIX ID", self.read_matrix_id())
             elif next_datatype == self.datatypes["MATRIX_INFO"]:
-                data = " {0:18s}    \n{1}".format("MATRIX INFO", self.read_matrix_info().to_string(display_layout=True, space=space + "{0:23s}".format(" ")))
+                data = " {0:24s}    \n{1}".format("MATRIX INFO", self.read_matrix_info().to_string(display_layout=True, space=space + "{0:29s}".format(" ")))
             elif next_datatype == self.datatypes["MATRIX_BLOCK"]:
                 block, row_range, col_range = self.read_matrix_block()
                 block_string = "{0}x{1} | {2} | {3}".format(block.shape[0], block.shape[1], row_range, col_range)
-                data = " {0:18s}    {1}".format("MATRIX BLOCK", block_string)
+                data = " {0:24s}    {1}".format("MATRIX BLOCK", block_string)
             elif next_datatype == self.datatypes["WORKER_ID"]:
-                data = " {0:18s}    {1}".format("WORKER ID", self.read_worker_id())
+                data = " {0:24s}    {1}".format("WORKER ID", self.read_worker_id())
             elif next_datatype == self.datatypes["WORKER_INFO"]:
-                data = " {0:18s}    \n{1}".format("WORKER INFO", self.read_worker_info().to_string(space + "{0:23s}".format(" ")))
+                data = " {0:24s}    \n{1}".format("WORKER INFO", self.read_worker_info().to_string(space + "{0:29s}".format(" ")))
             elif next_datatype == self.datatypes["PARAMETER"]:
-                data = " {0:18s}    {1}".format("PARAMETER", self.read_parameter().to_string())
+                data = " {0:9s} {1}".format("PARAMETER", self.read_parameter().to_string(space + "{0:10s}".format(" ")))
 
             print("{} {}".format(space, data))
 
-        print("{} ==================================================================".format(space))
+        print("{} ================================================================================".format(space))
 
         self.reset_read_position()

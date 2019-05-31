@@ -54,11 +54,17 @@ class TestLib:
 
         return S, U, V
 
-    def greet(self, rank, bb):
+    def greet(self, in_byte, in_char, in_short, in_int, in_long, in_float, in_double, in_string):
 
         in_args = {}
-        in_args["rank"] = Parameter("rank", Parameter.datatypes["INT"], rank)
-        in_args["bb"] = Parameter("bb", Parameter.datatypes["DOUBLE"], bb)
+        in_args["in_byte"] = Parameter("in_byte", Parameter.datatypes["BYTE"], in_byte)
+        in_args["in_char"] = Parameter("in_char", Parameter.datatypes["CHAR"], in_char)
+        in_args["in_short"] = Parameter("in_short", Parameter.datatypes["SHORT"], in_short)
+        in_args["in_int"] = Parameter("in_int", Parameter.datatypes["INT"], in_int)
+        in_args["in_long"] = Parameter("in_long", Parameter.datatypes["LONG"], in_long)
+        in_args["in_float"] = Parameter("in_float", Parameter.datatypes["FLOAT"], in_float)
+        in_args["in_double"] = Parameter("in_double", Parameter.datatypes["DOUBLE"], in_double)
+        in_args["in_string"] = Parameter("in_string", Parameter.datatypes["STRING"], in_string)
 
         self.als.display_parameters(in_args, "List of input parameters:")
 

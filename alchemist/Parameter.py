@@ -40,24 +40,24 @@ class Parameter:
     def get_value(self):
         return self.value
 
-    def to_string(self):
+    def to_string(self, space="  "):
         if self.datatype == self.datatypes["BYTE"]:
-            return "{2} ({0}) = {1}".format("BYTE", int(self.value), self.name)
+            return "{0:17s} {1}\n{2} {3:18s} {4}".format("BYTE", self.name, space, " ", int(self.value))
         elif self.datatype == self.datatypes["CHAR"]:
-            return "{2} ({0}) = {1}".format("CHAR", self.value, self.name)
+            return "{0:17s} {1}\n{2} {3:18s} {4}".format("CHAR", self.name, space, " ", self.value)
         elif self.datatype == self.datatypes["SHORT"]:
-            return "{2} ({0}) = {1}".format("SHORT", self.value, self.name)
+            return "{0:17s} {1}\n{2} {3:18s} {4}".format("SHORT", self.name, space, " ", self.value)
         elif self.datatype == self.datatypes["INT"]:
-            return "{2} ({0}) = {1}".format("INT", self.value, self.name)
+            return "{0:17s} {1}\n{2} {3:18s} {4}".format("INT", self.name, space, " ", self.value)
         elif self.datatype == self.datatypes["LONG"]:
-            return "{2} ({0}) = {1}".format("LONG", self.value, self.name)
+            return "{0:17s} {1}\n{2} {3:18s} {4}".format("LONG", self.name, space, " ", self.value)
         elif self.datatype == self.datatypes["FLOAT"]:
-            return "{2} ({0}) = {1}".format("FLOAT", self.value, self.name)
+            return "{0:17s} {1}\n{2} {3:18s} {4}".format("FLOAT", self.name, space, " ", self.value)
         elif self.datatype == self.datatypes["DOUBLE"]:
-            return "{2} ({0}) = {1}".format("DOUBLE", self.value, self.name)
+            return "{0:17s} {1}\n{2} {3:18s} {4}".format("DOUBLE", self.name, space, " ", self.value)
         elif self.datatype == self.datatypes["STRING"]:
-            return "{2} ({0}) = {1}".format("STRING", self.value, self.name)
+            return "{0:17s} {1}\n{2} {3:18s} {4}".format("STRING", self.name, space, " ", self.value)
         elif self.datatype == self.datatypes["MATRIX_ID"]:
-            return "{2} ({0}) = {1}".format("MATRIX ID", self.value, self.name)
+            return "{0:17s} {1}\n{2} {3:18s} {4}".format("MATRIX ID", self.name, space, " ", self.value)
         elif self.datatype == self.datatypes["MATRIX_INFO"]:
-            return "{2} ({0}) = \n{1}".format("MATRIX INFO", self.value.to_string(display_layout=True, space="       "), self.name)
+            return "{0:17s} {1}\n{2:27s} {3}".format("MATRIX INFO", self.name, " ", self.value.to_string(display_layout=True, space=space+"{0:18s}".format(" ")))
