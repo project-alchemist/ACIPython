@@ -19,10 +19,11 @@ class AlchemistSession:
 
     workers_connected = False
 
-    def __init__(self):
+    def __init__(self, driver_buffer_length = 10000, worker_buffer_length = 10000000,
+                 verbose = True, show_overheads = False):
         print("Starting Alchemist session ... ", end="", flush=True)
-        self.driver = DriverClient()
-        self.workers = WorkerClients()
+        self.driver = DriverClient(driver_buffer_length, verbose, show_overheads)
+        self.workers = WorkerClients(worker_buffer_length, verbose, show_overheads)
         self.workers_connected = False
         print("ready")
 
@@ -83,7 +84,18 @@ class AlchemistSession:
         print("{}  Worker  |   Serialization time   |       Send time        |      Receive time      |  Deserialization time  ".format(spacing))
         print("{}---------------------------------------------------------------------------------------------------------------".format(spacing))
         for i in range(self.workers.num_workers):
-            print("{0}    {1:3d}   |       {2:.4e}       |       {3:.4e}       |       {4:.4e}       |       {5:.4e}       ".format(spacing, i+1, times[0, i], times[1, i], times[2, i], times[3, i]))
+            serialization_times = times[i][0]
+            send_times = times[i][1]
+            receive_times = times[i][2]
+            deserialization_times = times[i][3]
+
+            print("{0}    {1:3d}   |       {2:.4e}       |       {3:.4e}       |       {4:.4e}       |       {5:.4e}       ".format(
+                    spacing, i + 1, serialization_times[0], send_times[0], receive_times[0], deserialization_times[0]))
+            for j in range(1, len(serialization_times)):
+                print("{0}          |       {1:.4e}       |       {2:.4e}       |       {3:.4e}       |       {4:.4e}       ".format(
+                    spacing, serialization_times[j], send_times[j], receive_times[j], deserialization_times[j]))
+            if i < self.workers.num_workers - 1:
+                print("{0}{1}".format(spacing, ' -' * 55))
         print("{}---------------------------------------------------------------------------------------------------------------".format(spacing))
         print("")
 
@@ -194,9 +206,15 @@ class AlchemistSession:
         self.driver.get_matrix_info()
 
     def request_workers(self, num_requested_workers):
-        self.workers.add_workers(self.driver.request_workers(num_requested_workers))
+
+        requested_workers = self.driver.request_workers(num_requested_workers)
+        if len(requested_workers) > 0:
+            self.workers.add_workers(requested_workers)
+            self.workers_connected = self.workers.connect()
+        else:
+            print("Alchemist could not allocate workers")
+
         self.workers.print()
-        self.workers_connected = self.workers.connect()
 
     def yield_workers(self, yielded_workers=[]):
         deallocated_workers = self.driver.yield_workers(yielded_workers)

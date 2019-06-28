@@ -67,7 +67,9 @@ class Message:
               "INVALID_HANDSHAKE": 1,
               "INVALID_CLIENT_ID": 2,
               "INVALID_SESSION_ID": 3,
-              "INCONSISTENT_DATATYPES": 4}
+              "INCONSISTENT_DATATYPES": 4,
+              "ERR_NO_WORKERS": 5,
+              "ERR_NONPOS_WORKER_REQUEST": 6}
 
     message_buffer = bytearray(header_length + max_body_length)
 
@@ -75,6 +77,9 @@ class Message:
 
     client_id = 0
     session_id = 0
+    message_id = 0
+    message_part = 0
+    message_parts = 0
     command_code = commands["WAIT"]
     error_code = errors["NONE"]
     body_length = 0
@@ -116,8 +121,14 @@ class Message:
     def get_body_length(self):
         return self.body_length
 
+    def get_buffer_length(self):
+        return self.max_body_length
+
     def get_command_name(self, v):
         return list(self.commands.keys())[list(self.commands.values()).index(v)]
+
+    def get_error_code(self):
+        return self.error_code
 
     def get_error_name(self, v):
         return list(self.errors.keys())[list(self.errors.values()).index(v)]

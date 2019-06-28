@@ -1,6 +1,7 @@
 import socket
 import time
 import numpy as np
+import math
 from .Message import Message
 from .Parameter import Parameter
 from .LibraryHandle import LibraryHandle
@@ -21,21 +22,24 @@ class Client:
     sock = []
 
     connected = False
+    verbose = False
+    show_overheads = False
 
-    buffer_length = 100000010
-
-    input_message = Message(100000010)
-    output_message = Message(100000010)
-
-    def __init__(self, id=0, hostname="host", address="0.0.0.0", port=24960):
+    def __init__(self, id=0, hostname="host", address="0.0.0.0", port=24960,
+                 buffer_length=10000, verbose=True, show_overheads=False):
         self.id = id
         self.hostname = hostname
         self.address = address
         self.port = port
 
         self.connected = False
+        self.verbose = verbose
+        self.show_overheads = show_overheads
 
         self.sock = []
+
+        self.input_message = Message(buffer_length + 10)
+        self.output_message = Message(buffer_length + 10)
 
     def connect(self):
 
@@ -45,22 +49,26 @@ class Client:
 
             # Connect the socket to the port where Alchemist is listening
             server_address = (self.hostname, self.port)
-            print('Connecting to Alchemist at {0}:{1} ...'.format(*server_address), end="", flush=True)
+            print('Connecting to Alchemist at {0}:{1} ... '.format(*server_address), end="", flush=True)
             try:
                 self.sock.connect(server_address)
 
                 if self.handshake():
                     self.connected = True
-                    print("Connected to Alchemist!")
+                    print("connected!")
                 else:
                     self.connected = False
-                    print("Unable to connect to Alchemist")
+                    print("unable to connect")
             except socket.gaierror:
                 self.connected = False
+                print("unable to connect")
                 print("ERROR: Address-related error connecting to Alchemist")
             except ConnectionRefusedError:
                 self.connected = False
+                print("unable to connect")
                 print("ERROR: Alchemist appears to be offline")
+        else:
+            print("Already connected to Alchemist")
 
         return self.connected
 
@@ -70,7 +78,7 @@ class Client:
     def send_message(self):
         try:
             self.output_message.finish()
-            self.output_message.print()
+            # self.output_message.print()
             start_time = time.time()
             self.sock.sendall(self.output_message.get())
             send_time = time.time() - start_time
@@ -89,22 +97,23 @@ class Client:
             self.input_message.reset()
             start_time = time.time()
             self.input_message.add_header(header)
+            error_code = self.input_message.get_error_code()
             remaining_body_length = self.input_message.get_body_length()
             while remaining_body_length > 0:
                 packet = self.sock.recv(min(remaining_body_length, 8192))
                 if not packet:
-                    return False
+                    return False, 0.0, 0
                 remaining_body_length -= len(packet)
                 self.input_message.add_packet(packet)
             receive_time = time.time() - start_time
-            self.input_message.print()
-            return True, receive_time
+            # self.input_message.print()
+            return True, receive_time, error_code
         except InterruptedError:
-            print("ERROR: Unable to send message (InterruptedError)")
-            return self.reset_socket, 0.0
+            print("ERROR: Unable to receive message (InterruptedError)")
+            return self.reset_socket, 0.0, 0
         except ConnectionError:
-            print("ERROR: Unable to send message (ConnectionError)")
-            return self.reset_socket, 0.0
+            print("ERROR: Unable to receive message (ConnectionError)")
+            return self.reset_socket, 0.0, 0
 
     def handshake(self):
         self.output_message.start(0, 0, "HANDSHAKE")
@@ -176,6 +185,9 @@ class DriverClient(Client):
 
     max_alchemist_workers = 0
 
+    def __init__(self, buffer_length=10000, verbose=True, show_overheads=False):
+        Client.__init__(self, buffer_length=buffer_length, verbose=verbose, show_overheads=show_overheads)
+
     def __del__(self):
         print("Closing driver client")
         self.close()
@@ -239,12 +251,14 @@ class DriverClient(Client):
         self.start_message("REQUEST_WORKERS")
         self.output_message.write_short(num_requested_workers)
         self.send_message()
-        self.receive_message()
-        num_allocated_workers = self.input_message.read_short()
-        print("{} allocated workers:".format(num_allocated_workers))
+        _, _, error_code = self.receive_message()
         workers = []
-        for i in range(0, num_allocated_workers):
-            workers.append(self.input_message.read_worker_info())
+        if error_code == 0:
+            num_allocated_workers = self.input_message.read_short()
+            print("{} allocated workers:".format(num_allocated_workers))
+            for i in range(0, num_allocated_workers):
+                workers.append(self.input_message.read_worker_info())
+
         return workers
 
     def yield_workers(self, yielded_workers=[]):
@@ -321,6 +335,15 @@ class DriverClient(Client):
 
 class WorkerClient(Client):
 
+    def __init__(self, id=0, hostname="host", address="0.0.0.0", port=24960,
+                 buffer_length=10000000, verbose=True, show_overheads=False):
+        Client.__init__(self, id=id, hostname=hostname, address=address, port=port,
+                        buffer_length=buffer_length, verbose=verbose, show_overheads=show_overheads)
+
+    def __del__(self):
+        print("Closing worker client")
+        self.close()
+
     def send_matrix_block(self, ah, matrix, rows=[0, 0, 1], cols=[0, 0, 1]):
 
         if rows[1] == 0:
@@ -333,54 +356,157 @@ class WorkerClient(Client):
         col_range = np.array(np.arange(cols[0], cols[1], cols[2]), dtype=np.intp)
         cols[1] -= 1
 
+        buffer_length = self.output_message.get_buffer_length() - 100
+        num_rows = len(row_range)
+        num_cols = len(col_range)
+
+        # print("Message")
+        # print(buffer_length)
+        # print(num_rows)
+        # print(num_cols)
+
+        # Assume a whole column can fit in a message
+        num_message_rows = math.floor(buffer_length / (8. * num_cols))
+        num_messages = math.ceil(num_rows / num_message_rows)
+
+        # print(num_message_rows)
+        # print(num_messages)
+
         times = []
+        serialization_times = []
+        send_times = []
+        receive_times = []
+        deserialization_times = []
 
-        self.output_message.start(self.client_id, self.session_id, "SEND_MATRIX_BLOCKS")
-        self.output_message.write_matrix_id(ah.id)
-        start = time.time()
-        self.output_message.write_matrix_block(matrix[np.ix_(row_range, col_range)], rows, cols)
-        times.append(time.time() - start)
+        message_row_start = 0
+        message_row_end = num_message_rows
 
-        _, send_time = self.send_message()
-        times.append(send_time)
-        _, receive_time = self.receive_message()
-        times.append(receive_time)
-        start = time.time()
-        self.input_message.read_matrix_id()
-        times.append(time.time() - start)
+        for m in range(num_messages):
+
+            self.output_message.start(self.client_id, self.session_id, "SEND_MATRIX_BLOCKS")
+            self.output_message.write_matrix_id(ah.id)
+
+            message_row_range = row_range[message_row_start:message_row_end]
+            message_col_range = col_range
+
+            message_cols = cols
+            message_rows = [int(message_row_range[0]), int(message_row_range[-1]), rows[2]]
+
+            grid = np.ix_(message_row_range, message_col_range)
+
+            # print(message_rows)
+            # print(message_cols)
+
+            start = time.time()
+            self.output_message.write_matrix_block(matrix[grid], message_rows, message_cols)
+            serialization_times.append(time.time() - start)
+
+            _, send_time = self.send_message()
+            send_times.append(send_time)
+
+            _, receive_time, error_code = self.receive_message()
+            receive_times.append(receive_time)
+
+            start = time.time()
+            self.input_message.read_matrix_id()
+            deserialization_times.append(time.time() - start)
+
+            message_row_start += num_message_rows
+            message_row_end += num_message_rows
+
+        times.append(serialization_times)
+        times.append(send_times)
+        times.append(receive_times)
+        times.append(deserialization_times)
+
         return times
 
     def get_matrix_block(self, mh, matrix, rows=[0, 0, 1], cols=[0, 0, 1]):
 
         if rows[1] == 0:
             rows[1] = matrix.shape[0]
+        row_range = np.array(np.arange(rows[0], rows[1], rows[2]), dtype=np.intp)
         rows[1] -= 1
 
         if cols[1] == 0:
             cols[1] = matrix.shape[1]
+        col_range = np.array(np.arange(cols[0], cols[1], cols[2]), dtype=np.intp)
         cols[1] -= 1
 
+        buffer_length = self.output_message.get_buffer_length() - 100
+        num_rows = len(row_range)
+        num_cols = len(col_range)
+
+        # print("Message")
+        # print(buffer_length)
+        # print(num_rows)
+        # print(num_cols)
+
+        # Assume a whole column can fit in a message
+        num_message_rows = math.floor(buffer_length / (8. * num_cols))
+        num_messages = math.ceil(num_rows / num_message_rows)
+
+        # print(num_message_rows)
+        # print(num_messages)
+
         times = []
+        serialization_times = []
+        send_times = []
+        receive_times = []
+        deserialization_times = []
 
-        start = time.time()
-        self.output_message.start(self.client_id, self.session_id, "REQUEST_MATRIX_BLOCKS")
-        self.output_message.write_matrix_id(mh.id)
-        self.output_message.write_long(rows[0])
-        self.output_message.write_long(rows[1])
-        self.output_message.write_long(rows[2])
-        self.output_message.write_long(cols[0])
-        self.output_message.write_long(cols[1])
-        self.output_message.write_long(cols[2])
-        times.append(time.time() - start)
+        message_row_start = 0
+        message_row_end = num_message_rows
 
-        _, send_time = self.send_message()
-        times.append(send_time)
-        _, receive_time = self.receive_message()
-        times.append(receive_time)
-        start = time.time()
-        self.input_message.read_matrix_id()
-        matrix, row_range, col_range = self.input_message.read_matrix_block(matrix)
-        times.append(time.time() - start)
+        # print(num_message_rows)
+
+        for m in range(num_messages):
+
+            self.output_message.start(self.client_id, self.session_id, "REQUEST_MATRIX_BLOCKS")
+            self.output_message.write_matrix_id(mh.id)
+
+            message_row_range = row_range[message_row_start:message_row_end]
+            message_col_range = col_range
+
+            # print(row_range)
+            # print(message_row_start)
+            # print(message_row_end)
+            # print(message_row_range)
+            # print(message_col_range)
+
+            message_cols = cols
+            message_rows = [int(message_row_range[0]), int(message_row_range[-1]), rows[2]]
+            # print(message_rows)
+            # print(message_cols)
+
+            start = time.time()
+            self.output_message.write_long(message_rows[0])
+            self.output_message.write_long(message_rows[1])
+            self.output_message.write_long(message_rows[2])
+            self.output_message.write_long(message_cols[0])
+            self.output_message.write_long(message_cols[1])
+            self.output_message.write_long(message_cols[2])
+            serialization_times.append(time.time() - start)
+
+            _, send_time = self.send_message()
+            send_times.append(send_time)
+
+            _, receive_time, error_code = self.receive_message()
+            receive_times.append(receive_time)
+
+            start = time.time()
+            self.input_message.read_matrix_id()
+            matrix, local_row_range, local_col_range = self.input_message.read_matrix_block(matrix)
+            deserialization_times.append(time.time() - start)
+
+            message_row_start += num_message_rows
+            message_row_end += num_message_rows
+
+        times.append(serialization_times)
+        times.append(send_times)
+        times.append(receive_times)
+        times.append(deserialization_times)
+
         return matrix, times
 
     def get_layout(self, mh):
@@ -449,15 +575,27 @@ class WorkerClients:
     num_workers = 0
     times = []
 
-    def __init__(self):
+    buffer_length = 0
+    verbose = False
+    show_overheads = False
+
+    def __init__(self, buffer_length=10000000, verbose=True, show_overheads=False):
         self.num_workers = 0
+        self.buffer_length = buffer_length
+        self.verbose = verbose
+        self.show_overheads = show_overheads
 
     def add_workers(self, new_workers):
         for i in range(self.num_workers, len(new_workers)):
-            worker = WorkerClient(new_workers[i].id, new_workers[i].hostname, new_workers[i].address, new_workers[i].port)
+            worker = WorkerClient(new_workers[i].id,
+                                  new_workers[i].hostname,
+                                  new_workers[i].address,
+                                  new_workers[i].port,
+                                  self.buffer_length,
+                                  self.verbose,
+                                  self.show_overheads)
             self.workers.append(worker)
         self.num_workers = len(new_workers)
-        self.times = np.zeros((4, self.num_workers))
         return self.num_workers
 
     def connect(self):
@@ -478,16 +616,21 @@ class WorkerClients:
             self.workers[i].handshake()
 
     def send_matrix_blocks(self, mh, matrix):
+        self.times = []
+
         for i in range(self.num_workers):
             rows, cols = self.workers[i].get_layout(mh)
-            self.times[:, i] = self.workers[i].send_matrix_block(mh, matrix, rows, cols)
+            times = self.workers[i].send_matrix_block(mh, matrix, rows, cols)
+            self.times.append(times)
         return self.times
 
     def get_matrix_blocks(self, mh, matrix):
+        self.times = []
 
         for i in range(self.num_workers):
             rows, cols = self.workers[i].get_layout(mh)
-            matrix, self.times[:, i] = self.workers[i].get_matrix_block(mh, matrix, rows, cols)
+            matrix, times = self.workers[i].get_matrix_block(mh, matrix, rows, cols)
+            self.times.append(times)
         return matrix, self.times
 
     def send_test_string(self):
