@@ -78,7 +78,7 @@ class Client:
     def send_message(self):
         try:
             self.output_message.finish()
-            # self.output_message.print()
+            self.output_message.print()
             start_time = time.time()
             self.sock.sendall(self.output_message.get())
             send_time = time.time() - start_time
@@ -106,7 +106,7 @@ class Client:
                 remaining_body_length -= len(packet)
                 self.input_message.add_packet(packet)
             receive_time = time.time() - start_time
-            # self.input_message.print()
+            self.input_message.print()
             return True, receive_time, error_code
         except InterruptedError:
             print("ERROR: Unable to receive message (InterruptedError)")

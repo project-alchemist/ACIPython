@@ -106,7 +106,7 @@ class AlchemistSession:
         num_rows = sh[0]
         num_cols = sh[1]
 
-        mh = self.get_array_handle(f)
+        mh = self.get_matrix_handle(f)
 
         chunk = 1000
 
@@ -217,6 +217,9 @@ class AlchemistSession:
         self.workers.print()
 
     def yield_workers(self, yielded_workers=[]):
+        if len(yielded_workers) == 0:
+            for w in self.workers.workers:
+                yielded_workers.append(w.id)
         deallocated_workers = self.driver.yield_workers(yielded_workers)
         if len(deallocated_workers) == 0:
             print("No workers were deallocated")
