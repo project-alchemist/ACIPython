@@ -111,7 +111,7 @@ class AlchemistSession:
         chunk = 1000
 
         for i in range(0, num_rows, chunk):
-            self.workers.send_blocks(mh, np.float64(f[i:min(num_rows, i+chunk), :]), i)
+            self.workers.send_matrix_blocks(mh, np.float64(f[i:min(num_rows, i+chunk), :]), i)
 
         return mh
 
