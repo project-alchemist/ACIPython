@@ -239,6 +239,7 @@ class Message:
         col_start = self.get_long()
         col_end = self.get_long()
         col_skip = self.get_long()
+        empty = self.get_byte()
 
         row_range = np.array(np.arange(row_start, row_end+1, row_skip), dtype=np.intp)
         col_range = np.array(np.arange(col_start, col_end+1, col_skip), dtype=np.intp)
@@ -253,8 +254,9 @@ class Message:
         else:
             ixgrid = np.ix_(row_range, col_range)
 
-        matrix[ixgrid] = np.frombuffer(self.message_buffer[self.read_pos:self.read_pos + 8*num_elements], dtype=np.float64).reshape((block_num_rows, block_num_cols))
-        self.read_pos += 8 * num_elements
+        if empty == 1:
+            matrix[ixgrid] = np.frombuffer(self.message_buffer[self.read_pos:self.read_pos + 8*num_elements], dtype=np.float64).reshape((block_num_rows, block_num_cols))
+            self.read_pos += 8 * num_elements
 
         return matrix, row_range, col_range
 
@@ -506,7 +508,6 @@ class Message:
 
         return self
 
-
     def put_matrix_block(self, block, rows, cols):
 
         if rows[1] == 0:
@@ -523,6 +524,7 @@ class Message:
         self.put_long(cols[2])
 
         if block.size > 0:
+            self.put_byte(1)
             # start = time.time()
             # self.message_buffer[self.write_pos:self.write_pos + 8*block.size] = block.tobytes('C')
             # # self.message_buffer[self.write_pos:self.write_pos + block.size] = block.view(dtype=np.uint8)
@@ -534,6 +536,8 @@ class Message:
             # print("Send time 2 {0}".format(send_time))
             self.message_buffer[self.write_pos:self.write_pos + 8 * block.size] = block.tobytes('C')
             self.write_pos += 8 * block.size
+        else:
+            self.put_byte(0)
 
         return self
 

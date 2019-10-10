@@ -365,7 +365,7 @@ class WorkerClient(Client):
         # print(num_rows)
         # print(num_cols)
 
-        # Assume a whole column can fit in a message
+        # Assume a whole row can fit in a message
         num_message_rows = math.floor(buffer_length / (8. * num_cols))
         num_messages = math.ceil(num_rows / num_message_rows)
 
