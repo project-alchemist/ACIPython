@@ -360,17 +360,9 @@ class WorkerClient(Client):
         num_rows = len(row_range)
         num_cols = len(col_range)
 
-        # print("Message")
-        # print(buffer_length)
-        # print(num_rows)
-        # print(num_cols)
-
         # Assume a whole row can fit in a message
         num_message_rows = math.floor(buffer_length / (8. * num_cols))
         num_messages = math.ceil(num_rows / num_message_rows)
-
-        # print(num_message_rows)
-        # print(num_messages)
 
         times = []
         serialization_times = []
@@ -393,9 +385,6 @@ class WorkerClient(Client):
             message_rows = [int(message_row_range[0]), int(message_row_range[-1]), rows[2]]
 
             grid = np.ix_(message_row_range, message_col_range)
-
-            # print(message_rows)
-            # print(message_cols)
 
             start = time.time()
             self.output_message.write_matrix_block(matrix[grid], message_rows, message_cols)
@@ -437,17 +426,9 @@ class WorkerClient(Client):
         num_rows = len(row_range)
         num_cols = len(col_range)
 
-        # print("Message")
-        # print(buffer_length)
-        # print(num_rows)
-        # print(num_cols)
-
         # Assume a whole column can fit in a message
         num_message_rows = math.floor(buffer_length / (8. * num_cols))
         num_messages = math.ceil(num_rows / num_message_rows)
-
-        # print(num_message_rows)
-        # print(num_messages)
 
         times = []
         serialization_times = []
@@ -468,24 +449,18 @@ class WorkerClient(Client):
             message_row_range = row_range[message_row_start:message_row_end]
             message_col_range = col_range
 
-            # print(row_range)
-            # print(message_row_start)
-            # print(message_row_end)
-            # print(message_row_range)
-            # print(message_col_range)
-
             message_cols = cols
             message_rows = [int(message_row_range[0]), int(message_row_range[-1]), rows[2]]
-            # print(message_rows)
-            # print(message_cols)
 
             start = time.time()
-            self.output_message.write_long(message_rows[0])
-            self.output_message.write_long(message_rows[1])
-            self.output_message.write_long(message_rows[2])
-            self.output_message.write_long(message_cols[0])
-            self.output_message.write_long(message_cols[1])
-            self.output_message.write_long(message_cols[2])
+            self.output_message.write_matrix_block(np.zeros((0,0)), message_rows, message_cols)
+            #
+            # self.output_message.write_long(message_rows[0])
+            # self.output_message.write_long(message_rows[1])
+            # self.output_message.write_long(message_rows[2])
+            # self.output_message.write_long(message_cols[0])
+            # self.output_message.write_long(message_cols[1])
+            # self.output_message.write_long(message_cols[2])
             serialization_times.append(time.time() - start)
 
             _, send_time = self.send_message()
